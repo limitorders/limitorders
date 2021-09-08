@@ -10,6 +10,10 @@ struct GridOrder {
 	uint96 moneyAmount;
 }
 
+interface IFeeTo {
+	function feeTo() external returns (address);
+}
+
 contract LimitOrdersLogic {
 	address public stock;
 	address public money;
@@ -17,35 +21,51 @@ contract LimitOrdersLogic {
 
 	mapping(uint => uint) public gridOrders;
 	mapping(address => uint[]) public userOrderIdLists;
-	uint[][1<<15] public sellOrderIdLists;
-	uint[][1<<15] public buyOrderIdLists;
+
+	uint constant TICK_COUNT = 12800;
+	uint[][TICK_COUNT] public sellOrderIdLists;
+	uint[][TICK_COUNT] public buyOrderIdLists;
+	uint public pendingReward;
 
 	address constant SEP206Contract = address(bytes20(uint160(0x2711)));
 
-	uint constant X = (uint(16777216)<<(0*25))|
-	                  (uint(16893910)<<(1*25))|
-	                  (uint(17011417)<<(2*25))|
-	                  (uint(17129740)<<(3*25))|
-	                  (uint(17248887)<<(4*25))|
-	                  (uint(17368863)<<(5*25))|
-	                  (uint(17489673)<<(6*25))|
-	                  (uint(17611323)<<(7*25))|
-	                  (uint(17733819)<<(8*25))|
-	                  (uint(17857168)<<(9*25));
+	// alpha = 1.0069555500567189 = 2**0.01;   alpha**100 = 2
+	// for i in range(10): print((1<<24)*(alpha**i))
+	uint constant X = (uint(16777216)<<(0*25))| //alpha*0
+	                  (uint(16893910)<<(1*25))| //alpha*1
+	                  (uint(17011417)<<(2*25))| //alpha*2
+	                  (uint(17129740)<<(3*25))| //alpha*3
+	                  (uint(17248887)<<(4*25))| //alpha*4
+	                  (uint(17368863)<<(5*25))| //alpha*5
+	                  (uint(17489673)<<(6*25))| //alpha*6
+	                  (uint(17611323)<<(7*25))| //alpha*7
+	                  (uint(17733819)<<(8*25))| //alpha*8
+	                  (uint(17857168)<<(9*25)); //alpha*9
 
-	uint constant Y = (uint(16777216)<<(0*25))|
-	                  (uint(17981375)<<(1*25))|
-	                  (uint(19271960)<<(2*25))|
-	                  (uint(20655176)<<(3*25))|
-	                  (uint(22137669)<<(4*25))|
-	                  (uint(23726566)<<(5*25))|
-	                  (uint(25429504)<<(6*25))|
-	                  (uint(27254668)<<(7*25))|
-	                  (uint(29210830)<<(8*25))|
-	                  (uint(31307392)<<(9*25));
+	// for i in range(10): print((1<<24)*(alpha**(i*10)))
+	uint constant Y = (uint(16777216)<<(0*25))| //alpha*0
+	                  (uint(17981375)<<(1*25))| //alpha*10
+	                  (uint(19271960)<<(2*25))| //alpha*20
+	                  (uint(20655176)<<(3*25))| //alpha*30
+	                  (uint(22137669)<<(4*25))| //alpha*40
+	                  (uint(23726566)<<(5*25))| //alpha*50
+	                  (uint(25429504)<<(6*25))| //alpha*60
+	                  (uint(27254668)<<(7*25))| //alpha*70
+	                  (uint(29210830)<<(8*25))| //alpha*80
+	                  (uint(31307392)<<(9*25)); //alpha*90
 
 	uint constant MASK25 = (1<<26)-1;
 	uint constant MASK64 = (1<<65)-1;
+
+	event CreateGridOrder(address indexed maker, uint packedOrder);
+	event DealWithSellOrders(address indexed taker, uint stockAmount, uint moneyAmount);
+	event DealWithBuyOrders(address indexed taker, uint stockAmount, uint moneyAmount);
+
+	function tickToPrice(uint tick) internal pure returns (uint) {
+		(uint shift, uint tail) = (tick/100, tick%100);
+		uint price = ((Y>>((tail/10)*25))&MASK25) * ((X>>(tail%10)*25)&MASK25);
+		return price << shift;
+	}
 
 	function getGridOrder(uint id) public view returns (GridOrder memory order) {
 		return parsePackedOrder(gridOrders[id]);
@@ -64,12 +84,6 @@ contract LimitOrdersLogic {
 		packed = (packed<<16) | uint(order.priceTickHi);
 		packed = (packed<<16) | uint(order.priceTickLo);
 		gridOrders[id] = packed;
-	}
-
-	function tickToPrice(uint tick) internal pure returns (uint) {
-		(uint shift, uint tail) = (tick/100, tick%100);
-		uint price = ((Y>>((tail/10)*25))&MASK25) * ((X>>(tail%10)*25)&MASK25);
-		return price << shift;
 	}
 
 	function safeTransfer(address coinType, address receiver, uint amount) internal {
@@ -101,6 +115,28 @@ contract LimitOrdersLogic {
 	
 	// =============================================================
 
+	function createGridOrder(uint packedOrder) external payable {
+		GridOrder memory order = parsePackedOrder(packedOrder);
+		require(order.priceTickHi > order.priceTickLo, "Hi<=Lo");
+		require(order.priceTickLo != 0, "zero-price-tick");
+		require(order.stockAmount != 0 || order.moneyAmount != 0, "zero-amount");
+		order.stockAmount = safeReceive(stock, msg.sender, order.stockAmount);
+		order.moneyAmount = safeReceive(money, msg.sender, order.moneyAmount);
+
+		uint orderId = (uint(uint160(bytes20(msg.sender)))<<96)|(uint(block.number)<<32);
+		while(gridOrders[orderId] != 0) {
+			orderId++;
+		}
+		setGridOrder(orderId, order);
+		uint[] storage userOrderIdList = userOrderIdLists[msg.sender];
+		uint[] storage sellOrderIdList = sellOrderIdLists[order.priceTickHi];
+		uint[] storage buyOrderIdList = buyOrderIdLists[order.priceTickLo];
+		userOrderIdList.push(orderId);
+		sellOrderIdList.push(orderId);
+		buyOrderIdList.push(orderId);
+		emit CreateGridOrder(msg.sender, packedOrder);
+	}
+
 	function cancelGridOrder(uint indexes) external {
 		uint userIdx = indexes&MASK64;
 		uint sellIdx = (indexes>>64)&MASK64;
@@ -108,7 +144,7 @@ contract LimitOrdersLogic {
 		uint[] storage userOrderIdList = userOrderIdLists[msg.sender];
 		uint orderId = userOrderIdList[userIdx];
 		GridOrder memory order = getGridOrder(orderId);
-		require(order.priceTickHi != 0, "no-such-order");
+		require(order.priceTickLo != 0, "no-such-order");
 
 		uint[] storage sellOrderIdList = sellOrderIdLists[order.priceTickHi];
 		uint[] storage buyOrderIdList = buyOrderIdLists[order.priceTickLo];
@@ -126,27 +162,11 @@ contract LimitOrdersLogic {
 		safeTransfer(money, msg.sender, uint(order.moneyAmount));
 	}
 
-	function createGridOrder(uint packedOrder) external payable {
-		GridOrder memory order = parsePackedOrder(packedOrder);
-		require(order.priceTickHi > order.priceTickLo, "Hi<=Lo");
-		order.stockAmount = safeReceive(stock, msg.sender, order.stockAmount);
-		order.moneyAmount = safeReceive(stock, msg.sender, order.moneyAmount);
-
-		uint orderId = (uint(uint160(bytes20(msg.sender)))<<96)|(uint(block.number)<<32);
-		while(gridOrders[orderId] != 0) {
-			orderId++;
-		}
-		setGridOrder(orderId, order);
-		uint[] storage userOrderIdList = userOrderIdLists[msg.sender];
-		uint[] storage sellOrderIdList = sellOrderIdLists[order.priceTickHi];
-		uint[] storage buyOrderIdList = buyOrderIdLists[order.priceTickLo];
-		userOrderIdList.push(orderId);
-		sellOrderIdList.push(orderId);
-		buyOrderIdList.push(orderId);
-	}
-
-	function dealWithSellOrders(uint[] calldata orderPosList, uint moneyAmount) external payable {
-		moneyAmount = safeReceive(money, msg.sender, moneyAmount);
+	function dealWithSellOrders(uint[] calldata orderPosList, uint moneyAmountIn) external payable {
+		uint totalMoneyAmount = safeReceive(money, msg.sender, moneyAmountIn);
+		uint fee0 = totalMoneyAmount * 2 / 1000; // 0.2% fee
+		uint moneyAmount0 = totalMoneyAmount - fee0;
+		uint moneyAmount = moneyAmount0;
 		uint gotStock = 0;
 		for(uint i=0; i<orderPosList.length; i++) {
 			for(uint j=0; j<256-48; j+=48) {
@@ -160,7 +180,12 @@ contract LimitOrdersLogic {
 				(moneyAmount, gotStock) = dealWithSellOrder(uint(orderPos), moneyAmount, gotStock);
 			}
 		}
+		uint dealMoney = moneyAmount0 - moneyAmount;
+		uint fee = fee0 * dealMoney / moneyAmount0;
 		safeTransfer(stock, msg.sender, gotStock);
+		safeTransfer(money, msg.sender, moneyAmount + fee0 - fee);
+		pendingReward += fee;
+		emit DealWithSellOrders(msg.sender, gotStock, dealMoney);
 	}
 
 	function dealWithSellOrder(uint orderPos, uint remainedMoney, uint gotStock) internal returns (uint, uint) {
@@ -189,8 +214,9 @@ contract LimitOrdersLogic {
 		return (remainedMoney, gotStock);
 	}
 
-	function dealWithBuyOrders(uint[] calldata orderPosList, uint stockAmount) external payable {
-		stockAmount = safeReceive(stock, msg.sender, stockAmount);
+	function dealWithBuyOrders(uint[] calldata orderPosList, uint stockAmountIn) external payable {
+		uint stockAmount = safeReceive(stock, msg.sender, stockAmountIn);
+		uint stockAmount0 = stockAmount;
 		uint gotMoney = 0;
 		for(uint i=0; i<orderPosList.length; i++) {
 			for(uint j=0; j<256-48; j+=48) {
@@ -204,7 +230,11 @@ contract LimitOrdersLogic {
 				(stockAmount, gotMoney) = dealWithBuyOrder(uint(orderPos), stockAmount, gotMoney);
 			}
 		}
-		safeTransfer(money, msg.sender, gotMoney);
+		uint fee = gotMoney * 2 / 1000; //0.2% fee
+		pendingReward += fee;
+		safeTransfer(money, msg.sender, gotMoney - fee);
+		safeTransfer(stock, msg.sender, stockAmount);
+		emit DealWithBuyOrders(msg.sender, stockAmount0 - stockAmount, gotMoney);
 	}
 
 	function dealWithBuyOrder(uint orderPos, uint remainedStock, uint gotMoney) internal returns (uint, uint) {
@@ -231,6 +261,12 @@ contract LimitOrdersLogic {
 		gridOrder.moneyAmount = uint96(uint(gridOrder.moneyAmount) + dealMoneyAmount);
 		setGridOrder(orderId, gridOrder);
 		return (remainedStock, gotMoney);
+	}
+
+	function withdrawReward() external {
+		address receiver = IFeeTo(factory).feeTo();
+		safeTransfer(money, receiver, pendingReward);
+		pendingReward = 0;
 	}
 }
 
@@ -267,7 +303,33 @@ contract LimitOrdersProxy {
 }
 
 contract LimitOrdersFactory {
+	address public feeToSetter;
+	address public newFeeToSetter;
+	address public feeTo;
+
 	event Created(address indexed stock, address indexed money, address pairAddr);
+
+	constructor(address _feeTo) {
+		feeToSetter = msg.sender;
+		newFeeToSetter = msg.sender;
+		feeTo = _feeTo;
+	}
+
+	function changeFeeToSetter(address _newFeeToSetter) external {
+		require(msg.sender == feeToSetter);
+		newFeeToSetter = _newFeeToSetter;
+	}
+
+	function acceptFeeToSetter() external {
+		require(msg.sender == newFeeToSetter);
+		feeToSetter = newFeeToSetter;
+	}
+
+	function setFeeTo(address _feeTo) external {
+		require(msg.sender == feeToSetter);
+		feeTo = _feeTo;
+	}
+
 	function create(address stock, address money, address impl) external {
 		address pairAddr = address(new LimitOrdersProxy{salt: 0}(stock, money, impl));
 		emit Created(stock, money, pairAddr);
