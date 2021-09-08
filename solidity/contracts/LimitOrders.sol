@@ -4,8 +4,8 @@ pragma solidity 0.8.6;
 import "./IERC20.sol";
 
 struct GridOrder {
-	uint16 priceTickLo;
-	uint16 priceTickHi;
+	uint32 priceTickLo;
+	uint32 priceTickHi;
 	uint96 stockAmount;
 	uint96 moneyAmount;
 }
@@ -32,7 +32,9 @@ contract LimitOrdersLogic {
 	address constant SEP206Contract = address(bytes20(uint160(0x2711)));
 
 	// alpha = 1.0069555500567189 = 2**0.01;   alpha**100 = 2
+	// 0x40000/0.0069555500567189 = 37688464
 	// for i in range(10): print((1<<24)*(alpha**i))
+	uint constant BASE = 37688464;
 	uint constant X = (uint(16777216)<<(0*25))| //alpha*0
 	                  (uint(16893910)<<(1*25))| //alpha*1
 	                  (uint(17011417)<<(2*25))| //alpha*2
@@ -63,9 +65,12 @@ contract LimitOrdersLogic {
 	event DealWithSellOrders(address indexed taker, uint stockAmount, uint moneyAmount);
 	event DealWithBuyOrders(address indexed taker, uint stockAmount, uint moneyAmount);
 
-	function tickToPrice(uint tick) internal pure returns (uint) {
+	function expandPrice(uint compressedPrice) internal pure returns (uint) {
+		uint tick = (compressedPrice >> 18) & 0x3FFF; // 14 bits
+		uint adjust = compressedPrice & 0x3FFFF; // 18 bits
 		(uint shift, uint tail) = (tick/100, tick%100);
 		uint price = ((Y>>((tail/10)*25))&MASK25) * ((X>>(tail%10)*25)&MASK25);
+		price = price * (BASE+adjust) / BASE;
 		return price << shift;
 	}
 
@@ -75,16 +80,16 @@ contract LimitOrdersLogic {
 
 	function parsePackedOrder(uint packed) public pure returns (GridOrder memory order) {
 		order.priceTickLo = uint16(packed >> 0);
-		order.priceTickHi = uint16(packed >> 16);
-		order.stockAmount = uint96(packed >> 32);
-		order.moneyAmount = uint96(packed >> (32+96));
+		order.priceTickHi = uint16(packed >> 32);
+		order.stockAmount = uint96(packed >> 64);
+		order.moneyAmount = uint96(packed >> (64+96));
 	}
 
 	function setGridOrder(uint id, GridOrder memory order) internal {
 		uint packed = uint(order.moneyAmount);
 		packed = (packed<<96) | uint(order.stockAmount);
-		packed = (packed<<16) | uint(order.priceTickHi);
-		packed = (packed<<16) | uint(order.priceTickLo);
+		packed = (packed<<32) | uint(order.priceTickHi);
+		packed = (packed<<32) | uint(order.priceTickLo);
 		gridOrders[id] = packed;
 	}
 
@@ -180,7 +185,7 @@ contract LimitOrdersLogic {
 		safeTransfer(money, msg.sender, uint(order.moneyAmount));
 	}
 
-	function dealWithSellOrders(uint[] calldata orderPosList, uint moneyAmountIn) external payable {
+	function dealWithSellOrders(uint maxPrice, uint[] calldata orderPosList, uint moneyAmountIn) external payable {
 		uint totalMoneyAmount = safeReceive(money, msg.sender, moneyAmountIn);
 		uint fee0 = totalMoneyAmount * 2 / 1000; // 0.2% fee
 		uint moneyAmount0 = totalMoneyAmount - fee0;
@@ -195,7 +200,7 @@ contract LimitOrdersLogic {
 				if(orderPos==0) {
 					break;
 				}
-				(moneyAmount, gotStock) = dealWithSellOrder(uint(orderPos), moneyAmount, gotStock);
+				(moneyAmount, gotStock) = dealWithSellOrder(maxPrice, uint(orderPos), moneyAmount, gotStock);
 			}
 		}
 		uint dealMoney = moneyAmount0 - moneyAmount;
@@ -206,7 +211,7 @@ contract LimitOrdersLogic {
 		emit DealWithSellOrders(msg.sender, gotStock, dealMoney);
 	}
 
-	function dealWithSellOrder(uint orderPos, uint remainedMoney, uint gotStock) internal returns (uint, uint) {
+	function dealWithSellOrder(uint maxPrice, uint orderPos, uint remainedMoney, uint gotStock) internal returns (uint, uint) {
 		(uint priceTick, uint idx) = (uint(orderPos)&0xFFFF, uint(orderPos)>>16);
 		uint[] storage sellOrderIdList = sellOrderIdLists[priceTick];
 		if(idx >= sellOrderIdList.length) {
@@ -214,7 +219,10 @@ contract LimitOrdersLogic {
 		}
 		uint orderId = sellOrderIdList[idx];
 		GridOrder memory gridOrder = getGridOrder(orderId);
-		uint price = tickToPrice(gridOrder.priceTickHi);
+		uint price = expandPrice(gridOrder.priceTickHi);
+		if(price > maxPrice) {
+			return (remainedMoney, gotStock);
+		}
 		uint moneyAmountOfMaker = price*uint(gridOrder.stockAmount)/(10**18);
 		(uint dealMoneyAmount, uint dealStockAmount) = (0, 0);
 		if(moneyAmountOfMaker <= remainedMoney) {
@@ -232,7 +240,7 @@ contract LimitOrdersLogic {
 		return (remainedMoney, gotStock);
 	}
 
-	function dealWithBuyOrders(uint[] calldata orderPosList, uint stockAmountIn) external payable {
+	function dealWithBuyOrders(uint minPrice, uint[] calldata orderPosList, uint stockAmountIn) external payable {
 		uint stockAmount = safeReceive(stock, msg.sender, stockAmountIn);
 		uint stockAmount0 = stockAmount;
 		uint gotMoney = 0;
@@ -245,7 +253,7 @@ contract LimitOrdersLogic {
 				if(orderPos==0) {
 					break;
 				}
-				(stockAmount, gotMoney) = dealWithBuyOrder(uint(orderPos), stockAmount, gotMoney);
+				(stockAmount, gotMoney) = dealWithBuyOrder(minPrice, uint(orderPos), stockAmount, gotMoney);
 			}
 		}
 		uint fee = gotMoney * 2 / 1000; //0.2% fee
@@ -255,7 +263,7 @@ contract LimitOrdersLogic {
 		emit DealWithBuyOrders(msg.sender, stockAmount0 - stockAmount, gotMoney);
 	}
 
-	function dealWithBuyOrder(uint orderPos, uint remainedStock, uint gotMoney) internal returns (uint, uint) {
+	function dealWithBuyOrder(uint minPrice, uint orderPos, uint remainedStock, uint gotMoney) internal returns (uint, uint) {
 		(uint priceTick, uint idx) = (uint(orderPos)&0xFFFF, uint(orderPos)>>16);
 		uint[] storage sellOrderIdList = sellOrderIdLists[priceTick];
 		if(idx >= sellOrderIdList.length) {
@@ -263,7 +271,10 @@ contract LimitOrdersLogic {
 		}
 		uint orderId = sellOrderIdList[idx];
 		GridOrder memory gridOrder = getGridOrder(orderId);
-		uint price = tickToPrice(gridOrder.priceTickLo);
+		uint price = expandPrice(gridOrder.priceTickLo);
+		if(price < minPrice) {
+			return (remainedStock, gotMoney);
+		}
 		uint stockAmountOfMaker = uint(gridOrder.stockAmount)*(10**18)/price;
 		(uint dealMoneyAmount, uint dealStockAmount) = (0, 0);
 		if(stockAmountOfMaker <= remainedStock) {
