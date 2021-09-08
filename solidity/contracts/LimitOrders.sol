@@ -21,11 +21,13 @@ contract LimitOrdersLogic {
 
 	mapping(uint => uint) public gridOrders;
 	mapping(address => uint[]) public userOrderIdLists;
+	uint public pendingReward;
 
 	uint constant TICK_COUNT = 12800;
+	uint[TICK_COUNT/256] public sellOrderMaskWords;
+	uint[TICK_COUNT/256] public buyOrderMaskWords;
 	uint[][TICK_COUNT] public sellOrderIdLists;
 	uint[][TICK_COUNT] public buyOrderIdLists;
-	uint public pendingReward;
 
 	address constant SEP206Contract = address(bytes20(uint160(0x2711)));
 
@@ -134,6 +136,14 @@ contract LimitOrdersLogic {
 		userOrderIdList.push(orderId);
 		sellOrderIdList.push(orderId);
 		buyOrderIdList.push(orderId);
+		if(sellOrderIdList.length == 1) {
+			(uint wordIdx, uint bitIdx) = (order.priceTickHi/256, order.priceTickHi%256);
+			sellOrderMaskWords[wordIdx] |= (uint(1)<<bitIdx); // set bit
+		}
+		if(buyOrderIdList.length == 1) {
+			(uint wordIdx, uint bitIdx) = (order.priceTickLo/256, order.priceTickLo%256);
+			buyOrderMaskWords[wordIdx] |= (uint(1)<<bitIdx); // set bit
+		}
 		emit CreateGridOrder(msg.sender, packedOrder);
 	}
 
@@ -158,6 +168,14 @@ contract LimitOrdersLogic {
 		userOrderIdList.pop();
 		sellOrderIdList.pop();
 		buyOrderIdList.pop();
+		if(sellOrderIdList.length == 0) {
+			(uint wordIdx, uint bitIdx) = (order.priceTickHi/256, order.priceTickHi%256);
+			sellOrderMaskWords[wordIdx] &= ~(uint(1)<<bitIdx); // clear bit
+		}
+		if(buyOrderIdList.length == 0) {
+			(uint wordIdx, uint bitIdx) = (order.priceTickLo/256, order.priceTickLo%256);
+			buyOrderMaskWords[wordIdx] &= ~(uint(1)<<bitIdx); // clear bit
+		}
 		safeTransfer(stock, msg.sender, uint(order.stockAmount));
 		safeTransfer(money, msg.sender, uint(order.moneyAmount));
 	}
