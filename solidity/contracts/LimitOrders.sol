@@ -23,7 +23,7 @@ contract LimitOrdersLogic {
 	mapping(address => uint[]) public userOrderIdLists;
 	uint public pendingReward;
 
-	uint constant TICK_COUNT = 12800;
+	uint constant TICK_COUNT = 8192;
 	uint[TICK_COUNT/256] public sellOrderMaskWords;
 	uint[TICK_COUNT/256] public buyOrderMaskWords;
 	uint[][TICK_COUNT] public sellOrderIdLists;
@@ -65,9 +65,10 @@ contract LimitOrdersLogic {
 	event DealWithSellOrders(address indexed taker, uint stockAmount, uint moneyAmount);
 	event DealWithBuyOrders(address indexed taker, uint stockAmount, uint moneyAmount);
 
-	function expandPrice(uint compressedPrice) internal pure returns (uint) {
-		uint tick = (compressedPrice >> 18) & 0x3FFF; // 14 bits
-		uint adjust = compressedPrice & 0x3FFFF; // 18 bits
+	// return a number in the range [2.8147497671065605e-12, 23698640444536.574]
+	function unpackPrice(uint packedPrice) internal pure returns (uint) {
+		uint tick = (packedPrice >> 19) & 0x1FFF; // 13 bits
+		uint adjust = packedPrice & 0x7FFFF; // 19 bits
 		(uint shift, uint tail) = (tick/100, tick%100);
 		uint price = ((Y>>((tail/10)*25))&MASK25) * ((X>>(tail%10)*25)&MASK25);
 		price = price * (BASE+adjust) / BASE;
@@ -219,18 +220,18 @@ contract LimitOrdersLogic {
 		}
 		uint orderId = sellOrderIdList[idx];
 		GridOrder memory gridOrder = getGridOrder(orderId);
-		uint price = expandPrice(gridOrder.priceTickHi);
+		uint price = unpackPrice(gridOrder.priceTickHi);
 		if(price > maxPrice) {
 			return (remainedMoney, gotStock);
 		}
-		uint moneyAmountOfMaker = price*uint(gridOrder.stockAmount)/(10**18);
+		uint moneyAmountOfMaker = price*uint(gridOrder.stockAmount)/(10**26);
 		(uint dealMoneyAmount, uint dealStockAmount) = (0, 0);
 		if(moneyAmountOfMaker <= remainedMoney) {
 			dealMoneyAmount = moneyAmountOfMaker;
 			dealStockAmount = gridOrder.stockAmount;
 		} else {
 			dealMoneyAmount = remainedMoney;
-			dealStockAmount = remainedMoney*(10**18)/price;
+			dealStockAmount = remainedMoney*(10**26)/price;
 		}
 		gotStock += dealStockAmount;
 		remainedMoney -= dealMoneyAmount;
@@ -271,17 +272,17 @@ contract LimitOrdersLogic {
 		}
 		uint orderId = sellOrderIdList[idx];
 		GridOrder memory gridOrder = getGridOrder(orderId);
-		uint price = expandPrice(gridOrder.priceTickLo);
+		uint price = unpackPrice(gridOrder.priceTickLo);
 		if(price < minPrice) {
 			return (remainedStock, gotMoney);
 		}
-		uint stockAmountOfMaker = uint(gridOrder.stockAmount)*(10**18)/price;
+		uint stockAmountOfMaker = uint(gridOrder.stockAmount)*(10**26)/price;
 		(uint dealMoneyAmount, uint dealStockAmount) = (0, 0);
 		if(stockAmountOfMaker <= remainedStock) {
 			dealMoneyAmount = gridOrder.moneyAmount;
 			dealStockAmount = stockAmountOfMaker;
 		} else {
-			dealMoneyAmount = remainedStock*price/(10**18);
+			dealMoneyAmount = remainedStock*price/(10**26);
 			dealStockAmount = remainedStock;
 		}
 		gotMoney += dealMoneyAmount;
