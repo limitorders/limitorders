@@ -1,3 +1,4 @@
 
 *.swp
 solidity/build
+vue3/node_modules
