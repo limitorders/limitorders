@@ -4,8 +4,13 @@ pragma solidity 0.8.6;
 import "./IERC20.sol";
 
 struct GridOrder {
-	uint32 priceTickLo;
-	uint32 priceTickHi;
+	uint64 priceBaseLo;
+	uint64 priceBaseHi;
+	uint16 priceTickLo;
+	uint16 priceTickHi;
+
+	uint32 indexInSellList;
+	uint32 indexInBuyList;
 	uint96 stockAmount;
 	uint96 moneyAmount;
 }
@@ -19,11 +24,11 @@ contract LimitOrdersLogic {
 	address public money;
 	address public factory;
 
-	mapping(uint => uint) public gridOrders;
+	mapping(uint => GridOrder) public gridOrders;
 	mapping(address => uint[]) public userOrderIdLists;
 	uint public pendingReward;
 
-	uint constant TICK_COUNT = 8192;
+	uint constant TICK_COUNT = 7900;
 	uint[TICK_COUNT/256] public sellOrderMaskWords;
 	uint[TICK_COUNT/256] public buyOrderMaskWords;
 	uint[][TICK_COUNT] public sellOrderIdLists;
@@ -65,33 +70,26 @@ contract LimitOrdersLogic {
 	event DealWithSellOrders(address indexed taker, uint stockAmount, uint moneyAmount);
 	event DealWithBuyOrders(address indexed taker, uint stockAmount, uint moneyAmount);
 
-	// return a number in the range [2.8147497671065605e-12, 23698640444536.574]
-	function unpackPrice(uint packedPrice) internal pure returns (uint) {
-		uint tick = (packedPrice >> 19) & 0x1FFF; // 13 bits
+	// return a number in the range [2.8147497671065605e-12, 2962330055567.072]
+	// maximum returned value: 17857168*31307392*(2**79)=fe3b4ed7d40000000000000000000000 < 2**128
+	function unpackPrice(uint packedPrice) internal pure returns (uint64 priceBase, uint16 priceTick) {
+		priceTick = uint16((packedPrice >> 19) & 0x1FFF); // 13 bits
 		uint adjust = packedPrice & 0x7FFFF; // 19 bits
-		(uint shift, uint tail) = (tick/100, tick%100);
-		uint price = ((Y>>((tail/10)*25))&MASK25) * ((X>>(tail%10)*25)&MASK25);
-		price = price * (BASE+adjust) / BASE;
-		return price << shift;
+		uint tail = priceTick%100;
+		uint beforeAdjust = ((Y>>((tail/10)*25))&MASK25) * ((X>>(tail%10)*25)&MASK25);
+		priceBase = uint64(beforeAdjust * (BASE+adjust) / BASE);
 	}
 
 	function getGridOrder(uint id) public view returns (GridOrder memory order) {
-		return parsePackedOrder(gridOrders[id]);
-	}
-
-	function parsePackedOrder(uint packed) public pure returns (GridOrder memory order) {
-		order.priceTickLo = uint16(packed >> 0);
-		order.priceTickHi = uint16(packed >> 32);
-		order.stockAmount = uint96(packed >> 64);
-		order.moneyAmount = uint96(packed >> (64+96));
+		return gridOrders[id];
 	}
 
 	function setGridOrder(uint id, GridOrder memory order) internal {
-		uint packed = uint(order.moneyAmount);
-		packed = (packed<<96) | uint(order.stockAmount);
-		packed = (packed<<32) | uint(order.priceTickHi);
-		packed = (packed<<32) | uint(order.priceTickLo);
-		gridOrders[id] = packed;
+		gridOrders[id] = order;
+	}
+
+	function deleteGridOrder(uint id) internal {
+		delete gridOrders[id];
 	}
 
 	function safeTransfer(address coinType, address receiver, uint amount) internal {
@@ -122,26 +120,37 @@ contract LimitOrdersLogic {
 	}
 	
 	// =============================================================
-
+	
 	function createGridOrder(uint packedOrder) external payable {
-		GridOrder memory order = parsePackedOrder(packedOrder);
-		require(order.priceTickHi > order.priceTickLo, "Hi<=Lo");
-		require(order.priceTickLo != 0, "zero-price-tick");
+		uint packedPriceLo = uint32(packedOrder >> 0);
+		uint packedPriceHi = uint32(packedOrder >> 32);
+		require(packedPriceHi > packedPriceLo, "Hi<=Lo");
+		require(packedPriceLo != 0, "zero-price-tick");
+
+		GridOrder memory order;
+		(order.priceBaseLo, order.priceTickLo) = unpackPrice(packedPriceLo);
+		(order.priceBaseHi, order.priceTickHi) = unpackPrice(packedPriceHi);
+		order.stockAmount = uint96(packedOrder >> 64);
+		order.moneyAmount = uint96(packedOrder >> (64+96));
 		require(order.stockAmount != 0 || order.moneyAmount != 0, "zero-amount");
 		order.stockAmount = safeReceive(stock, msg.sender, order.stockAmount);
 		order.moneyAmount = safeReceive(money, msg.sender, order.moneyAmount);
 
 		uint orderId = (uint(uint160(bytes20(msg.sender)))<<96)|(uint(block.number)<<32);
-		while(gridOrders[orderId] != 0) {
+		while(getGridOrder(orderId).priceBaseHi != 0) {
 			orderId++;
 		}
-		setGridOrder(orderId, order);
 		uint[] storage userOrderIdList = userOrderIdLists[msg.sender];
+		userOrderIdList.push(orderId);
+
 		uint[] storage sellOrderIdList = sellOrderIdLists[order.priceTickHi];
 		uint[] storage buyOrderIdList = buyOrderIdLists[order.priceTickLo];
-		userOrderIdList.push(orderId);
+		order.indexInSellList = uint32(sellOrderIdList.length);
+		order.indexInBuyList = uint32(buyOrderIdList.length);
+		setGridOrder(orderId, order);
 		sellOrderIdList.push(orderId);
 		buyOrderIdList.push(orderId);
+
 		if(sellOrderIdList.length == 1) {
 			(uint wordIdx, uint bitIdx) = (order.priceTickHi/256, order.priceTickHi%256);
 			sellOrderMaskWords[wordIdx] |= (uint(1)<<bitIdx); // set bit
@@ -153,10 +162,7 @@ contract LimitOrdersLogic {
 		emit CreateGridOrder(msg.sender, packedOrder);
 	}
 
-	function cancelGridOrder(uint indexes) external {
-		uint userIdx = indexes&MASK64;
-		uint sellIdx = (indexes>>64)&MASK64;
-		uint buyIdx = (indexes>>128)&MASK64;
+	function cancelGridOrder(uint userIdx) external {
 		uint[] storage userOrderIdList = userOrderIdLists[msg.sender];
 		uint orderId = userOrderIdList[userIdx];
 		GridOrder memory order = getGridOrder(orderId);
@@ -164,16 +170,32 @@ contract LimitOrdersLogic {
 
 		uint[] storage sellOrderIdList = sellOrderIdLists[order.priceTickHi];
 		uint[] storage buyOrderIdList = buyOrderIdLists[order.priceTickLo];
+		(uint sellIdx, uint buyIdx) = (order.indexInSellList, order.indexInBuyList);
 		require(orderId == sellOrderIdList[sellIdx], "wrong-sell-idx");
 		require(orderId == buyOrderIdList[buyIdx], "wrong-buy-idx");
 
-		delete gridOrders[orderId];
+		deleteGridOrder(orderId);
 		userOrderIdList[userIdx] = userOrderIdList[userOrderIdList.length-1];
-		sellOrderIdList[userIdx] = sellOrderIdList[userOrderIdList.length-1];
-		buyOrderIdList[userIdx] = buyOrderIdList[userOrderIdList.length-1];
+		uint last = sellOrderIdList.length-1;
+		if(sellIdx != last) {
+			uint id = sellOrderIdList[last];
+			sellOrderIdList[sellIdx] = id;
+			GridOrder memory o = getGridOrder(id);
+			o.indexInSellList = uint32(sellIdx);
+			setGridOrder(id, o);
+		}
+		last = buyOrderIdList.length-1;
+		if(buyIdx != last) {
+			uint id = buyOrderIdList[last];
+			buyOrderIdList[buyIdx] = id;
+			GridOrder memory o = getGridOrder(id);
+			o.indexInBuyList = uint32(buyIdx);
+			setGridOrder(id, o);
+		}
 		userOrderIdList.pop();
 		sellOrderIdList.pop();
 		buyOrderIdList.pop();
+
 		if(sellOrderIdList.length == 0) {
 			(uint wordIdx, uint bitIdx) = (order.priceTickHi/256, order.priceTickHi%256);
 			sellOrderMaskWords[wordIdx] &= ~(uint(1)<<bitIdx); // clear bit
@@ -220,7 +242,7 @@ contract LimitOrdersLogic {
 		}
 		uint orderId = sellOrderIdList[idx];
 		GridOrder memory gridOrder = getGridOrder(orderId);
-		uint price = unpackPrice(gridOrder.priceTickHi);
+		uint price = uint(gridOrder.priceBaseHi)<<(uint(gridOrder.priceTickHi)/100);
 		if(price > maxPrice) {
 			return (remainedMoney, gotStock);
 		}
@@ -272,7 +294,7 @@ contract LimitOrdersLogic {
 		}
 		uint orderId = sellOrderIdList[idx];
 		GridOrder memory gridOrder = getGridOrder(orderId);
-		uint price = unpackPrice(gridOrder.priceTickLo);
+		uint price = uint(gridOrder.priceBaseLo)<<(uint(gridOrder.priceTickLo)/100);
 		if(price < minPrice) {
 			return (remainedStock, gotMoney);
 		}
