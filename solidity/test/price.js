@@ -114,4 +114,7 @@ function test() {
 	
 }
 
-test()
+// test()
+
+module.exports.unpackPrice = unpackPrice;
+module.exports.packPrice = packPrice;
