@@ -1,9 +1,9 @@
 <template>
-  <h1><img src="/favicon.svg">&nbsp;My On-Chain Memos&nbsp;<img src="/favicon.svg"></h1>
+  <h1><img src="/favicon.svg">&nbsp;A Simple DEX with Limit Orders&nbsp;<img src="/favicon.svg"></h1>
   <div class="normal">
-    <p>This small utility helps you write and read memos using the on-chain storage of smartBCH. </p>
+    <p>Here we implements a very simple DEX which supports limited orders. We hope it can be a useful complement to the AMM-based DEX markets on smartBCH.</p>
+    <p>Currently, only grid orders for <a href="">grid trading</a> are supported. The orders must be placed as a pair: a sell-order at a higher price and a buy-order at a lower price. The money got in the dealt sell-order will be automatically placed in the corresponding buy-order, and vice-versa. If you do not want to sell (buy), just use a very high (low) price in the sell (buy) order, respectively.</p>
     <p>This is a <a href="https://www.puredapp.org">Pure DApp</a>, which means its contract code and front-end code are both opensource and anyone can deploy them at anywhere.</p>
-    <p>You can <a @click="read" href="">read</a> your existing memos and <a @click="write" href="">write</a> a new one. All the memos are encrypted with your public key and can only be decrypted with your private key. You will find it useful to store your accounts and passwords on websites here. As long as your account's mnemonic words are safe, these passwords are safe. Here we also provide a pure client-side <a @click="passgen" href="">password generator</a> which uses the safe <a href="https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues"><code>Crypto.getRandomValues()</code></a> function.</p>
     <p><b>CAVEAT:</b> This is an opensource software. It is provided “as is”, without warranty of any kind. Please use it <b>AT YOUR OWN RISK</b>.</p>
   </div>
 </template>

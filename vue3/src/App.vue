@@ -1,9 +1,9 @@
 <template>
   <div id="nav" style="font-size: 30px">
     <router-link to="/">Home</router-link> |
-    <router-link to="/read">Read Memos</router-link> |
-    <router-link to="/write">Write Memo</router-link> |
-    <router-link to="/passgen">Generate Random Password</router-link>
+    <router-link to="/markets">Markets</router-link> |
+    <router-link to="/taker">Exchange</router-link> |
+    <router-link to="/maker">Grid Trading</router-link>
   </div>
   <router-view/>
 </template>

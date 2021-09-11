@@ -1,13 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../views/Home.vue'
-import Read from '../views/Read.vue'
-import Write from '../views/Write.vue'
-import PassGen from '../views/PassGen.vue'
+import Markets from '../views/Markets.vue'
+import Taker from '../views/Taker.vue'
+import Maker from '../views/Maker.vue'
 const routes = [
   { path: "/", component: Home },
-  { path: "/passgen", component: PassGen },
-  { path: "/write", component: Write },
-  { path: "/read", component: Read }]
+  { path: "/markets", component: Markets },
+  { path: "/taker", component: Taker },
+  { path: "/maker", component: Maker }]
 
 const router = createRouter({
   history: createWebHistory(process.env.BASE_URL),
