@@ -305,11 +305,11 @@ contract LimitOrdersLogic {
 	function dealWithBuyOrder(uint minPrice, uint orderPos, uint maxGotMoney, 
 				  uint remainedStock, uint gotMoney) internal returns (uint, uint) {
 		(uint priceTick, uint idx) = (uint(orderPos)&0xFFFF, uint(orderPos)>>16);
-		uint[] storage sellOrderIdList = sellOrderIdLists[priceTick];
-		if(idx >= sellOrderIdList.length) {
+		uint[] storage buyOrderIdList = buyOrderIdLists[priceTick];
+		if(idx >= buyOrderIdList.length) {
 			return (remainedStock, gotMoney);
 		}
-		uint orderId = sellOrderIdList[idx];
+		uint orderId = buyOrderIdList[idx];
 		GridOrder memory gridOrder = getGridOrder(orderId);
 		uint price = uint(gridOrder.priceBaseLo)<<(uint(gridOrder.priceTickLo)/100);
 		if(price < minPrice) {

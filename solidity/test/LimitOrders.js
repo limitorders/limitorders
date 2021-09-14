@@ -117,7 +117,22 @@ contract('LimitOrdersLogic', async (accounts) => {
     });
 
     it('dealWithBuyOrders', async () => {
-        // console.log('TODO');
+        const result1 = await pair.createGridOrder(pack({
+            priceLo: 12345.67,
+            priceHi: 67890.12,
+            stock  : 1e8,
+            money  : 1e8,
+        }), { from: alice });
+
+        await wbtc.transfer(bob, 1000, { from: alice });
+        const result2 = await pair.dealWithBuyOrders(
+            10000n * priceDec, // minPrice,
+            [5196n], // orderPosList
+            BigInt(1000) << 96n | BigInt(1e8), // stockAmountIn_maxGotMoney
+            { from: bob },
+        );
+        assert.equal(await wbtc.balanceOf(bob), 0);
+        assert.equal(await usdt.balanceOf(bob), 35959065);
     });
 
     it('withdrawReward', async () => {
