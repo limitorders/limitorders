@@ -9,6 +9,7 @@ const LimitOrdersFactory = artifacts.require("LimitOrdersFactory");
 const FakeToken = artifacts.require("FakeToken");
 
 const _1e18 = 10n ** 18n;
+const priceDec = 10n ** 26n;
 
 contract('LimitOrdersFactory', async (accounts) => {
 
@@ -38,34 +39,44 @@ contract('LimitOrdersFactory', async (accounts) => {
 
 contract('LimitOrdersLogic', async (accounts) => {
 
-    // let logic;
-    // let proxy;
-    // let factory;
+    const alice = accounts[0];
+    const bob   = accounts[1];
+
+    let logic;
+    let factory;
+    let wbtc;
+    let usdt;
+    let pair;
 
     before(async () => {
-        // TODO
+        logic = await LimitOrdersLogic.new();
+        factory = await LimitOrdersFactory.new(accounts[0]);
     });
 
-    it('createGridOrder', async () => {
-        const logic = await LimitOrdersLogic.new();
-        const factory = await LimitOrdersFactory.new(accounts[0]);
-        const wbtc = await FakeToken.new("WBTC", 21000000n * _1e18);
-        const usdt = await FakeToken.new("USDT", 10000000n * _1e18);
+    beforeEach(async () => {
+        const totalSupply = 10000000n * _1e18;
+        wbtc = await FakeToken.new("WBTC", totalSupply);
+        usdt = await FakeToken.new("USDT", totalSupply);
         const result = await factory.create(wbtc.address, usdt.address, logic.address);
         const event = getPairCreatedEvent(result);
         const pairAddr = event.pairAddr;
-        const pair = await LimitOrdersLogic.at(pairAddr);
+        pair = await LimitOrdersLogic.at(pairAddr);
+        await wbtc.approve(pair.address, totalSupply, { from: alice });
+        await usdt.approve(pair.address, totalSupply, { from: alice });
+        await wbtc.approve(pair.address, totalSupply, { from: bob });
+        await usdt.approve(pair.address, totalSupply, { from: bob });
+        // await wbtc.transfer(bob, totalSupply / 2n, { from: alice });
+        // await usdt.transfer(bob, totalSupply / 2n, { from: alice });
+    });
 
-        await wbtc.approve(pair.address, 1e10);
-        await usdt.approve(pair.address, 1e10);
-        const result2 = await pair.createGridOrder(pack({
+    it('createGridOrder', async () => {
+        const result = await pair.createGridOrder(pack({
             priceLo: 12345.67,
             priceHi: 67890.12,
             stock  : 1e8,
             money  : 1e8,
-        }));
-
-        const orderId = getOrderID(accounts[0], result2);
+        }), { from: alice });
+        const orderId = getOrderID(alice, result);
         const order = await pair.getGridOrder(orderId);
         assert.equal(order.priceBaseLo, 1600103478202431);
         assert.equal(order.priceBaseHi, 376865667786415);
@@ -75,10 +86,11 @@ contract('LimitOrdersLogic', async (accounts) => {
         assert.equal(order.indexInBuyList, 0);
         assert.equal(order.stockAmount, 1e8);
         assert.equal(order.moneyAmount, 1e8);
-        assert.equal(await pair.userOrderIdLists(accounts[0], 0), orderId);
+        assert.equal(await pair.userOrderIdLists(alice, 0), orderId);
         assert.equal(await pair.sellOrderIdLists(order.priceTickHi, 0), orderId);
         assert.equal(await pair.buyOrderIdLists(order.priceTickLo, 0), orderId);
-        // TODO
+        // console.log(mergePrice(order.priceBaseLo, order.priceTickLo));
+        // console.log(mergePrice(order.priceBaseHi, order.priceTickHi));
     });
 
     it('cancelGridOrder', async () => {
@@ -86,7 +98,22 @@ contract('LimitOrdersLogic', async (accounts) => {
     });
 
     it('dealWithSellOrders', async () => {
-        // console.log('TODO');
+        const result1 = await pair.createGridOrder(pack({
+            priceLo: 12345.67,
+            priceHi: 67890.12,
+            stock  : 1e8,
+            money  : 1e8,
+        }), { from: alice });
+
+        await usdt.transfer(bob, 1e8, { from: alice });
+        const result2 = await pair.dealWithSellOrders(
+            70000n * priceDec, // maxPrice,
+            [5442n], // orderPosList
+            BigInt(1e8) << 96n | BigInt(1e8), // moneyAmountIn_maxGotStock
+            { from: bob },
+        );
+        assert.equal(await usdt.balanceOf(bob), 0);
+        assert.equal(await wbtc.balanceOf(bob), 1470);
     });
 
     it('dealWithBuyOrders', async () => {
@@ -98,6 +125,10 @@ contract('LimitOrdersLogic', async (accounts) => {
     });
 
 });
+
+function mergePrice(base, tick) {
+    return BigInt(base) << (BigInt(tick) / 100n);
+}
 
 function getOrderID(addr, result) {
     const blockNum = result.receipt.blockNumber;
