@@ -18,7 +18,7 @@ contract('LimitOrdersFactory', async (accounts) => {
         const wbtc = await FakeToken.new("WBTC", 21000000n * _1e18);
         const usdt = await FakeToken.new("USDT", 10000000n * _1e18);
         const result = await factory.create(wbtc.address, usdt.address, logic.address);
-        const event = getCreatedEvent(result);
+        const event = getPairCreatedEvent(result);
         const pairAddr = event.pairAddr;
         const pair = await LimitOrdersLogic.at(pairAddr);
         assert.equal(await pair.stock(), wbtc.address);
@@ -52,7 +52,7 @@ contract('LimitOrdersLogic', async (accounts) => {
         const wbtc = await FakeToken.new("WBTC", 21000000n * _1e18);
         const usdt = await FakeToken.new("USDT", 10000000n * _1e18);
         const result = await factory.create(wbtc.address, usdt.address, logic.address);
-        const event = getCreatedEvent(result);
+        const event = getPairCreatedEvent(result);
         const pairAddr = event.pairAddr;
         const pair = await LimitOrdersLogic.at(pairAddr);
 
@@ -61,10 +61,23 @@ contract('LimitOrdersLogic', async (accounts) => {
         const result2 = await pair.createGridOrder(pack({
             priceLo: 12345.67,
             priceHi: 67890.12,
-            stock  : 10,
-            money  : 100000,
+            stock  : 1e8,
+            money  : 1e8,
         }));
-        console.log(result2);
+
+        const orderId = getOrderID(accounts[0], result2);
+        const order = await pair.getGridOrder(orderId);
+        assert.equal(order.priceBaseLo, 1600103478202431);
+        assert.equal(order.priceBaseHi, 376865667786415);
+        assert.equal(order.priceTickLo, 5196);
+        assert.equal(order.priceTickHi, 5442);
+        assert.equal(order.indexInSellList, 0);
+        assert.equal(order.indexInBuyList, 0);
+        assert.equal(order.stockAmount, 1e8);
+        assert.equal(order.moneyAmount, 1e8);
+        assert.equal(await pair.userOrderIdLists(accounts[0], 0), orderId);
+        assert.equal(await pair.sellOrderIdLists(order.priceTickHi, 0), orderId);
+        assert.equal(await pair.buyOrderIdLists(order.priceTickLo, 0), orderId);
         // TODO
     });
 
@@ -86,13 +99,10 @@ contract('LimitOrdersLogic', async (accounts) => {
 
 });
 
-// contract('price', async (accounts) => {
-
-//     it('unpackPrice', async () => {
-//         console.log(packPrice(1234.56).toString(16));
-//     });
-
-// });
+function getOrderID(addr, result) {
+    const blockNum = result.receipt.blockNumber;
+    return BigInt(addr) << 96n | BigInt(blockNum) << 32n;
+}
 
 // https://stackoverflow.com/questions/22335853/hack-to-convert-javascript-number-to-uint32
 function pack(order) {
@@ -106,25 +116,29 @@ function pack(order) {
 
 // [moneyAmount:96][stockAmount:96][packedPriceHi:32][packedPriceLo:32]
 function packOrder(packedPriceLo, packedPriceHi, stockAmount, moneyAmount) {
-    console.log('packOrder, args:', packedPriceLo, packedPriceHi, stockAmount, moneyAmount);
+    // console.log('packOrder, args:', packedPriceLo, packedPriceHi, stockAmount, moneyAmount);
     const packed = BigInt(packedPriceLo)
                  | BigInt(packedPriceHi) <<  32n
                  | BigInt(stockAmount)   <<  64n
                  | BigInt(moneyAmount)   << 160n;
-
-    console.log(BigInt(packedPriceHi) <<  32n);
-    console.log(BigInt(stockAmount)   <<  64n);
-    console.log(BigInt(moneyAmount)   << 160n);
-    console.log('packed:', packed);
+    // console.log('packed:', packed);
     return packed;
 }
 
-function getCreatedEvent(result) {
+function getPairCreatedEvent(result) {
     const log = result.logs.find(log => log.event == 'Created');
     assert.isNotNull(log);
     return {
         stock   : log.args.stock,
         money   : log.args.money,
         pairAddr: log.args.pairAddr,
+    };
+}
+function getGridOrderCreatedEvent(result) {
+    const log = result.logs.find(log => log.event == 'CreateGridOrder');
+    assert.isNotNull(log);
+    return {
+        maker      : log.args.maker,
+        packedOrder: log.args.packedOrder,
     };
 }
