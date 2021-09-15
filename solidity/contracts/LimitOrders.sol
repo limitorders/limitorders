@@ -63,8 +63,8 @@ contract LimitOrdersLogic {
 	                  (uint(29210830)<<(8*25))| //alpha*80
 	                  (uint(31307392)<<(9*25)); //alpha*90
 
-	uint constant MASK25 = (1<<26)-1;
-	uint constant MASK64 = (1<<65)-1;
+	uint constant MASK25 = (1<<25)-1;
+	uint constant MASK64 = (1<<64)-1;
 	uint constant PriceDecimals = 26;
 
 	event CreateGridOrder(address indexed maker, uint packedOrder);
@@ -315,7 +315,7 @@ contract LimitOrdersLogic {
 		if(price < minPrice) {
 			return (remainedStock, gotMoney);
 		}
-		uint stockAmountOfMaker = uint(gridOrder.stockAmount)*(10**PriceDecimals)/price;
+		uint stockAmountOfMaker = uint(gridOrder.moneyAmount)*(10**PriceDecimals)/price;
 		(uint dealMoneyAmount, uint dealStockAmount) = (0, 0);
 		if(stockAmountOfMaker <= remainedStock) {
 			dealMoneyAmount = gridOrder.moneyAmount;

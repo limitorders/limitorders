@@ -78,7 +78,7 @@ contract('LimitOrdersLogic', async (accounts) => {
         }), { from: alice });
         const orderId = getOrderID(alice, result);
         const order = await pair.getGridOrder(orderId);
-        assert.equal(order.priceBaseLo, 1600103478202431);
+        assert.equal(order.priceBaseLo, 548256975020389);
         assert.equal(order.priceBaseHi, 376865667786415);
         assert.equal(order.priceTickLo, 5196);
         assert.equal(order.priceTickHi, 5442);
@@ -132,7 +132,30 @@ contract('LimitOrdersLogic', async (accounts) => {
             { from: bob },
         );
         assert.equal(await wbtc.balanceOf(bob), 0);
-        assert.equal(await usdt.balanceOf(bob), 35959065);
+        assert.equal(await usdt.balanceOf(bob), 12320958);
+    });
+
+    // TODO
+    it('dealWithBuyOrders_sellAll', async () => {
+        const result1 = await pair.createGridOrder(pack({
+            priceLo: 30000.00,
+            priceHi: 60000.00,
+            stock  : 1e8,
+            money  : 1e8,
+        }), { from: alice });
+        const orderId = getOrderID(alice, result1);
+        const order = await pair.getGridOrder(orderId);
+        console.log(order);
+
+        // await wbtc.transfer(bob, 1000, { from: alice });
+        // const result2 = await pair.dealWithBuyOrders(
+        //     10000n * priceDec, // minPrice,
+        //     [5196n], // orderPosList
+        //     BigInt(1000) << 96n | BigInt(1e8), // stockAmountIn_maxGotMoney
+        //     { from: bob },
+        // );
+        // assert.equal(await wbtc.balanceOf(bob), 0);
+        // assert.equal(await usdt.balanceOf(bob), 35959065);
     });
 
     it('withdrawReward', async () => {
@@ -153,11 +176,17 @@ function getOrderID(addr, result) {
 // https://stackoverflow.com/questions/22335853/hack-to-convert-javascript-number-to-uint32
 function pack(order) {
     return packOrder(
-        packPrice(order.priceLo) >>> 0,
-        packPrice(order.priceHi) >>> 0,
+        packPrice2(order.priceLo),
+        packPrice2(order.priceHi),
         order.stock,
         order.money
     );
+}
+
+function packPrice2(price) {
+    const packed = packPrice(price) >>> 0;
+    console.log('packPrice, price=', price, 'packed=', packed);
+    return packed;
 }
 
 // [moneyAmount:96][stockAmount:96][packedPriceHi:32][packedPriceLo:32]
