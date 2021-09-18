@@ -332,8 +332,8 @@ contract LimitOrdersLogic {
 		}
 		gotMoney = newGotMoney;
 		remainedStock -= dealStockAmount;
-		gridOrder.stockAmount = uint96(uint(gridOrder.stockAmount) - dealStockAmount);
-		gridOrder.moneyAmount = uint96(uint(gridOrder.moneyAmount) + dealMoneyAmount);
+		gridOrder.stockAmount = uint96(uint(gridOrder.stockAmount) + dealStockAmount);
+		gridOrder.moneyAmount = uint96(uint(gridOrder.moneyAmount) - dealMoneyAmount);
 		setGridOrder(orderId, gridOrder);
 		return (remainedStock, gotMoney);
 	}

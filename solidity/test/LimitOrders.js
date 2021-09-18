@@ -135,27 +135,34 @@ contract('LimitOrdersLogic', async (accounts) => {
         assert.equal(await usdt.balanceOf(bob), 12320958);
     });
 
-    // TODO
     it('dealWithBuyOrders_sellAll', async () => {
         const result1 = await pair.createGridOrder(pack({
             priceLo: 30000.00,
             priceHi: 60000.00,
-            stock  : 1e8,
-            money  : 1e8,
+            stock  : 0,
+            money  : 30000 * 100,
         }), { from: alice });
         const orderId = getOrderID(alice, result1);
-        const order = await pair.getGridOrder(orderId);
-        console.log(order);
+        let order = await pair.getGridOrder(orderId);
+        // console.log(order);
+        assert.equal(order.priceTickLo, 5324);
+        assert.equal(order.priceTickHi, 5424);
+        assert.equal(order.indexInSellList, 0);
+        assert.equal(order.indexInBuyList, 0);
 
-        // await wbtc.transfer(bob, 1000, { from: alice });
-        // const result2 = await pair.dealWithBuyOrders(
-        //     10000n * priceDec, // minPrice,
-        //     [5196n], // orderPosList
-        //     BigInt(1000) << 96n | BigInt(1e8), // stockAmountIn_maxGotMoney
-        //     { from: bob },
-        // );
-        // assert.equal(await wbtc.balanceOf(bob), 0);
-        // assert.equal(await usdt.balanceOf(bob), 35959065);
+        await wbtc.transfer(bob, 100, { from: alice });
+        const result2 = await pair.dealWithBuyOrders(
+            20000n * priceDec, // minPrice,
+            [5324n], // orderPosList
+            BigInt(100) << 96n | BigInt(3e8), // stockAmountIn_maxGotMoney
+            { from: bob },
+        );
+        assert.equal(await wbtc.balanceOf(bob), 0);
+        assert.equal(await usdt.balanceOf(bob), 2994000);
+
+        order = await pair.getGridOrder(orderId);
+        assert.equal(order.stockAmount, 100);
+        assert.equal(order.moneyAmount, 0);
     });
 
     it('withdrawReward', async () => {
@@ -176,8 +183,8 @@ function getOrderID(addr, result) {
 // https://stackoverflow.com/questions/22335853/hack-to-convert-javascript-number-to-uint32
 function pack(order) {
     return packOrder(
-        packPrice2(order.priceLo),
-        packPrice2(order.priceHi),
+        packPrice(order.priceLo) >>> 0,
+        packPrice(order.priceHi) >>> 0,
         order.stock,
         order.money
     );
