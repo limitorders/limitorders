@@ -94,7 +94,35 @@ contract('LimitOrdersLogic', async (accounts) => {
     });
 
     it('cancelGridOrder', async () => {
-        // console.log('TODO');
+        await wbtc.transfer(bob, 6e8, { from: alice });
+        await usdt.transfer(bob, 6e8, { from: alice });
+
+        const result0 = await pair.createGridOrder(pack({priceLo: 40000, priceHi: 50000, stock: 1e8, money: 1e8}), { from: bob });
+        const result1 = await pair.createGridOrder(pack({priceLo: 40000, priceHi: 50000, stock: 2e8, money: 2e8}), { from: bob });
+        const result2 = await pair.createGridOrder(pack({priceLo: 40000, priceHi: 50000, stock: 3e8, money: 3e8}), { from: bob });
+        assert.equal(await wbtc.balanceOf(bob), 0);
+        assert.equal(await usdt.balanceOf(bob), 0);
+
+        const orderID0 = getOrderID(bob, result0);
+        const orderID1 = getOrderID(bob, result1);
+        const orderID2 = getOrderID(bob, result2);
+        assert.deepEqual(await getUserOrderIDs(pair, bob), [orderID0, orderID1, orderID2]);
+        assert.deepEqual(await getSellOrderIDs(pair, 5397), [orderID0, orderID1, orderID2]);
+        assert.deepEqual(await getBuyOrderIDs(pair, 5365), [orderID0, orderID1, orderID2]);
+
+        await pair.cancelGridOrder(1, { from: bob });
+        assert.deepEqual(await getUserOrderIDs(pair, bob), [orderID0, orderID2]);
+        assert.deepEqual(await getSellOrderIDs(pair, 5397), [orderID0, orderID2]);
+        assert.deepEqual(await getBuyOrderIDs(pair, 5365), [orderID0, orderID2]);
+
+        assert.equal(await wbtc.balanceOf(bob), 2e8);
+        assert.equal(await usdt.balanceOf(bob), 2e8);
+
+        const order2 = await pair.getGridOrder(orderID2);
+        assert.equal(order2.priceTickLo, 5365);
+        assert.equal(order2.priceTickHi, 5397);
+        assert.equal(order2.indexInSellList, 1);
+        assert.equal(order2.indexInBuyList, 1);
     });
 
     it('dealWithSellOrders', async () => {
@@ -135,7 +163,127 @@ contract('LimitOrdersLogic', async (accounts) => {
         assert.equal(await usdt.balanceOf(bob), 12320958);
     });
 
+    it('dealWithSellOrders_buyAll', async () => {
+        const result1 = await pair.createGridOrder(pack({
+            priceLo: 40000.00,
+            priceHi: 50000.00,
+            stock  : 600,
+            money  : 0,
+        }), { from: alice });
+        const orderId = getOrderID(alice, result1);
+        let order = await pair.getGridOrder(orderId);
+        // console.log(order);
+        assert.equal(order.priceTickLo, 5365);
+        assert.equal(order.priceTickHi, 5397);
+        assert.equal(order.indexInSellList, 0);
+        assert.equal(order.indexInBuyList, 0);
+
+        await usdt.transfer(bob, 4e7, { from: alice });
+        const result2 = await pair.dealWithSellOrders(
+            50000n * priceDec, // maxPrice,
+            [5397n], // orderPosList
+            BigInt(4e7) << 96n | BigInt(1000), // moneyAmountIn_maxGotStock
+            { from: bob },
+        );
+        assert.equal(await usdt.balanceOf(bob), 9941251);
+        assert.equal(await wbtc.balanceOf(bob), 600);
+
+        order = await pair.getGridOrder(orderId);
+        assert.equal(order.stockAmount, 0);
+        assert.equal(order.moneyAmount, 29998632);
+    });
+
+    it('dealWithSellOrders_buyHalf1', async () => {
+        const result1 = await pair.createGridOrder(pack({
+            priceLo: 40000.00,
+            priceHi: 50000.00,
+            stock  : 600,
+            money  : 0,
+        }), { from: alice });
+        const orderId = getOrderID(alice, result1);
+        let order = await pair.getGridOrder(orderId);
+        // console.log(order);
+        assert.equal(order.priceTickLo, 5365);
+        assert.equal(order.priceTickHi, 5397);
+        assert.equal(order.indexInSellList, 0);
+        assert.equal(order.indexInBuyList, 0);
+
+        await usdt.transfer(bob, 4e7, { from: alice });
+        const result2 = await pair.dealWithSellOrders(
+            50000n * priceDec, // maxPrice,
+            [5397n], // orderPosList
+            BigInt(15000000) << 96n | BigInt(1000), // moneyAmountIn_maxGotStock
+            { from: bob },
+        );
+        assert.equal(await usdt.balanceOf(bob), 25000000);
+        assert.equal(await wbtc.balanceOf(bob), 299);
+
+        order = await pair.getGridOrder(orderId);
+        assert.equal(order.stockAmount, 301);
+        assert.equal(order.moneyAmount, 14970000);
+    });
+
+    it('dealWithSellOrders_buyHalf2', async () => {
+        const result1 = await pair.createGridOrder(pack({
+            priceLo: 40000.00,
+            priceHi: 50000.00,
+            stock  : 600,
+            money  : 0,
+        }), { from: alice });
+        const orderId = getOrderID(alice, result1);
+        let order = await pair.getGridOrder(orderId);
+        // console.log(order);
+        assert.equal(order.priceTickLo, 5365);
+        assert.equal(order.priceTickHi, 5397);
+        assert.equal(order.indexInSellList, 0);
+        assert.equal(order.indexInBuyList, 0);
+
+        await usdt.transfer(bob, 4e7, { from: alice });
+        const result2 = await pair.dealWithSellOrders(
+            50000n * priceDec, // maxPrice,
+            [5397n], // orderPosList
+            BigInt(4e7) << 96n | BigInt(300), // moneyAmountIn_maxGotStock
+            { from: bob },
+        );
+        assert.equal(await usdt.balanceOf(bob), 24970626);
+        assert.equal(await wbtc.balanceOf(bob), 300);
+
+        order = await pair.getGridOrder(orderId);
+        assert.equal(order.stockAmount, 300);
+        assert.equal(order.moneyAmount, 14999316);
+    });
+
     it('dealWithBuyOrders_sellAll', async () => {
+        const result1 = await pair.createGridOrder(pack({
+            priceLo: 30000.00,
+            priceHi: 60000.00,
+            stock  : 0,
+            money  : 30000 * 100,
+        }), { from: alice });
+        const orderId = getOrderID(alice, result1);
+        let order = await pair.getGridOrder(orderId);
+        // console.log(order);
+        assert.equal(order.priceTickLo, 5324);
+        assert.equal(order.priceTickHi, 5424);
+        assert.equal(order.indexInSellList, 0);
+        assert.equal(order.indexInBuyList, 0);
+
+        await wbtc.transfer(bob, 101, { from: alice });
+        const result2 = await pair.dealWithBuyOrders(
+            20000n * priceDec, // minPrice,
+            [5324n], // orderPosList
+            BigInt(100) << 96n | BigInt(3e8), // stockAmountIn_maxGotMoney
+            { from: bob },
+        );
+        assert.equal(await wbtc.balanceOf(bob), 1);
+        assert.equal(await usdt.balanceOf(bob), 2994000);
+
+        order = await pair.getGridOrder(orderId);
+        assert.equal(order.stockAmount, 100);
+        assert.equal(order.moneyAmount, 0);
+    });
+
+    it('dealWithBuyOrders_sellAll1', async () => {
         const result1 = await pair.createGridOrder(pack({
             priceLo: 30000.00,
             priceHi: 60000.00,
@@ -154,15 +302,45 @@ contract('LimitOrdersLogic', async (accounts) => {
         const result2 = await pair.dealWithBuyOrders(
             20000n * priceDec, // minPrice,
             [5324n], // orderPosList
-            BigInt(100) << 96n | BigInt(3e8), // stockAmountIn_maxGotMoney
+            BigInt(50) << 96n | BigInt(3e8), // stockAmountIn_maxGotMoney
             { from: bob },
         );
-        assert.equal(await wbtc.balanceOf(bob), 0);
-        assert.equal(await usdt.balanceOf(bob), 2994000);
+        assert.equal(await wbtc.balanceOf(bob), 50);
+        assert.equal(await usdt.balanceOf(bob), 1496995);
 
         order = await pair.getGridOrder(orderId);
-        assert.equal(order.stockAmount, 100);
-        assert.equal(order.moneyAmount, 0);
+        assert.equal(order.stockAmount, 50);
+        assert.equal(order.moneyAmount, 1500006);
+    });
+
+    it('dealWithBuyOrders_sellHalf2', async () => {
+        const result1 = await pair.createGridOrder(pack({
+            priceLo: 30000.00,
+            priceHi: 60000.00,
+            stock  : 0,
+            money  : 30000 * 100,
+        }), { from: alice });
+        const orderId = getOrderID(alice, result1);
+        let order = await pair.getGridOrder(orderId);
+        // console.log(order);
+        assert.equal(order.priceTickLo, 5324);
+        assert.equal(order.priceTickHi, 5424);
+        assert.equal(order.indexInSellList, 0);
+        assert.equal(order.indexInBuyList, 0);
+
+        await wbtc.transfer(bob, 101, { from: alice });
+        const result2 = await pair.dealWithBuyOrders(
+            20000n * priceDec, // minPrice,
+            [5324n], // orderPosList
+            BigInt(100) << 96n | BigInt(1500000), // stockAmountIn_maxGotMoney
+            { from: bob },
+        );
+        assert.equal(await wbtc.balanceOf(bob), 51);
+        assert.equal(await usdt.balanceOf(bob), 1497000);
+
+        order = await pair.getGridOrder(orderId);
+        assert.equal(order.stockAmount, 50);
+        assert.equal(order.moneyAmount, 1500000);
     });
 
     it('withdrawReward', async () => {
@@ -171,13 +349,50 @@ contract('LimitOrdersLogic', async (accounts) => {
 
 });
 
-function mergePrice(base, tick) {
-    return BigInt(base) << (BigInt(tick) / 100n);
+async function getUserOrderIDs(pair, addr) {
+    let ids = [];
+    for (let i = 0; ; i++) {
+        try {
+            let id = await pair.userOrderIdLists(addr, i);
+            ids.push(BigInt(id.toString()));
+        } catch(e) {
+            break;
+        }
+    }
+    return ids;
+}
+async function getSellOrderIDs(pair, tick) {
+    let ids = [];
+    for (let i = 0; ; i++) {
+        try {
+            let id = await pair.sellOrderIdLists(tick, i);
+            ids.push(BigInt(id.toString()));
+        } catch(e) {
+            break;
+        }
+    }
+    return ids;
+}
+async function getBuyOrderIDs(pair, tick) {
+    let ids = [];
+    for (let i = 0; ; i++) {
+        try {
+            let id = await pair.buyOrderIdLists(tick, i);
+            ids.push(BigInt(id.toString()));
+        } catch(e) {
+            break;
+        }
+    }
+    return ids;
 }
 
 function getOrderID(addr, result) {
     const blockNum = result.receipt.blockNumber;
     return BigInt(addr) << 96n | BigInt(blockNum) << 32n;
+}
+
+function mergePrice(base, tick) {
+    return BigInt(base) << (BigInt(tick) / 100n);
 }
 
 // https://stackoverflow.com/questions/22335853/hack-to-convert-javascript-number-to-uint32
