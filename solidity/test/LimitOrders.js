@@ -13,11 +13,18 @@ const priceDec = 10n ** 26n;
 
 contract('LimitOrdersFactory', async (accounts) => {
 
+    let logic;
+    let wbtc;
+    let usdt;
+
+    before(async () => {
+        logic = await LimitOrdersLogic.new();
+        wbtc = await FakeToken.new("WBTC", 21000000n * _1e18);
+        usdt = await FakeToken.new("USDT", 10000000n * _1e18);
+    });
+
     it('create', async () => {
-        const logic = await LimitOrdersLogic.new();
         const factory = await LimitOrdersFactory.new(accounts[0]);
-        const wbtc = await FakeToken.new("WBTC", 21000000n * _1e18);
-        const usdt = await FakeToken.new("USDT", 10000000n * _1e18);
         const result = await factory.create(wbtc.address, usdt.address, logic.address);
         const event = getPairCreatedEvent(result);
         const pairAddr = event.pairAddr;
@@ -27,12 +34,32 @@ contract('LimitOrdersFactory', async (accounts) => {
         assert.equal(await pair.factory(), factory.address);
     });
 
-    it('changeFeeToSetter', async () => {
-        // console.log('TODO');
+    it('setFeeTo', async () => {
+        const factory = await LimitOrdersFactory.new(accounts[1], {from: accounts[0]});
+        assert.equal(await factory.feeToSetter(), accounts[0]);
+        assert.equal(await factory.feeTo(), accounts[1]);
+
+        await factory.setFeeTo(accounts[2], {from: accounts[0]});
+        assert.equal(await factory.feeTo(), accounts[2]);
+    
+        await truffleAssert.reverts(
+            factory.setFeeTo(accounts[3], {from: accounts[1]}),
+            "revert"
+        );
     });
 
-    it('setFeeTo', async () => {
-        // console.log('TODO');
+    it('changeFeeToSetter', async () => {
+        const factory = await LimitOrdersFactory.new(accounts[0], {from: accounts[1]});
+        assert.equal(await factory.feeToSetter(), accounts[1]);
+
+        await factory.changeFeeToSetter(accounts[2], {from: accounts[1]});
+        await truffleAssert.reverts(
+            factory.acceptFeeToSetter({from: accounts[3]}),
+            "revert"
+        );
+
+        await factory.acceptFeeToSetter({from: accounts[2]});
+        assert.equal(await factory.feeToSetter(), accounts[2]);
     });
 
 });
@@ -41,6 +68,7 @@ contract('LimitOrdersLogic', async (accounts) => {
 
     const alice = accounts[0];
     const bob   = accounts[1];
+    const fiddy = accounts[2];
 
     let logic;
     let factory;
@@ -50,7 +78,7 @@ contract('LimitOrdersLogic', async (accounts) => {
 
     before(async () => {
         logic = await LimitOrdersLogic.new();
-        factory = await LimitOrdersFactory.new(accounts[0]);
+        factory = await LimitOrdersFactory.new(fiddy);
     });
 
     beforeEach(async () => {
@@ -188,6 +216,11 @@ contract('LimitOrdersLogic', async (accounts) => {
         );
         assert.equal(await usdt.balanceOf(bob), 0);
         assert.equal(await wbtc.balanceOf(bob), 1470);
+
+        // console.log(result2.logs[0].args);
+        const BN = web3.utils.toBN;
+        truffleAssert.eventEmitted(result2, 'DealWithSellOrders', 
+            { taker: bob, stockAmount: BN(1470), moneyAmount: BN(99800000) });
     });
 
     it('dealWithBuyOrders', async () => {
@@ -208,6 +241,11 @@ contract('LimitOrdersLogic', async (accounts) => {
         );
         assert.equal(await wbtc.balanceOf(bob), 0);
         assert.equal(await usdt.balanceOf(bob), 12320958);
+ 
+        // console.log(result2.logs[0].args);
+        const BN = web3.utils.toBN;
+        truffleAssert.eventEmitted(result2, 'DealWithBuyOrders', 
+            { taker: bob, stockAmount: BN(1000), moneyAmount: BN(12345649) });
     });
 
     it('dealWithSellOrders_buyAll', async () => {
@@ -233,12 +271,14 @@ contract('LimitOrdersLogic', async (accounts) => {
             BigInt(1000),        // maxGotStock
             { from: bob },
         );
-        assert.equal(await usdt.balanceOf(bob), 9941251);
-        assert.equal(await wbtc.balanceOf(bob), 600);
 
         order = await pair.getGridOrder(orderId);
         assert.equal(order.stockAmount, 0);
         assert.equal(order.moneyAmount, 29998632);
+
+        assert.equal(await wbtc.balanceOf(bob), 600);
+        assert.equal(await usdt.balanceOf(bob), 9941251);
+        assert.equal(await pair.pendingReward(), 60117);
     });
 
     it('dealWithSellOrders_buyHalf1', async () => {
@@ -264,12 +304,14 @@ contract('LimitOrdersLogic', async (accounts) => {
             BigInt(1000),             // maxGotStock
             { from: bob },
         );
-        assert.equal(await usdt.balanceOf(bob), 25000000);
-        assert.equal(await wbtc.balanceOf(bob), 299);
 
         order = await pair.getGridOrder(orderId);
         assert.equal(order.stockAmount, 301);
         assert.equal(order.moneyAmount, 14970000);
+
+        assert.equal(await wbtc.balanceOf(bob), 299);
+        assert.equal(await usdt.balanceOf(bob), 25000000);
+        assert.equal(await pair.pendingReward(), 30000);
     });
 
     it('dealWithSellOrders_buyHalf2', async () => {
@@ -295,12 +337,14 @@ contract('LimitOrdersLogic', async (accounts) => {
             BigInt(300),         // maxGotStock
             { from: bob },
         );
-        assert.equal(await usdt.balanceOf(bob), 24970626);
-        assert.equal(await wbtc.balanceOf(bob), 300);
 
         order = await pair.getGridOrder(orderId);
         assert.equal(order.stockAmount, 300);
         assert.equal(order.moneyAmount, 14999316);
+
+        assert.equal(await wbtc.balanceOf(bob), 300);
+        assert.equal(await usdt.balanceOf(bob), 24970626);
+        assert.equal(await pair.pendingReward(), 30058);
     });
 
     it('dealWithBuyOrders_sellAll', async () => {
@@ -326,12 +370,14 @@ contract('LimitOrdersLogic', async (accounts) => {
             BigInt(3e8),         // maxGotMoney
             { from: bob },
         );
-        assert.equal(await wbtc.balanceOf(bob), 1);
-        assert.equal(await usdt.balanceOf(bob), 2994000);
 
         order = await pair.getGridOrder(orderId);
         assert.equal(order.stockAmount, 100);
         assert.equal(order.moneyAmount, 0);
+
+        assert.equal(await wbtc.balanceOf(bob), 1);
+        assert.equal(await usdt.balanceOf(bob), 2994000);
+        assert.equal(await pair.pendingReward(), 6000);
     });
 
     it('dealWithBuyOrders_sellHalf1', async () => {
@@ -357,12 +403,14 @@ contract('LimitOrdersLogic', async (accounts) => {
             BigInt(3e8),        // maxGotMoney
             { from: bob },
         );
-        assert.equal(await wbtc.balanceOf(bob), 50);
-        assert.equal(await usdt.balanceOf(bob), 1496995);
 
         order = await pair.getGridOrder(orderId);
         assert.equal(order.stockAmount, 50);
         assert.equal(order.moneyAmount, 1500006);
+
+        assert.equal(await wbtc.balanceOf(bob), 50);
+        assert.equal(await usdt.balanceOf(bob), 1496995);
+        assert.equal(await pair.pendingReward(), 2999);
     });
 
     it('dealWithBuyOrders_sellHalf2', async () => {
@@ -388,12 +436,14 @@ contract('LimitOrdersLogic', async (accounts) => {
             BigInt(1500000),     // maxGotMoney
             { from: bob },
         );
-        assert.equal(await wbtc.balanceOf(bob), 51);
-        assert.equal(await usdt.balanceOf(bob), 1497000);
 
         order = await pair.getGridOrder(orderId);
         assert.equal(order.stockAmount, 50);
         assert.equal(order.moneyAmount, 1500000);
+
+        assert.equal(await wbtc.balanceOf(bob), 51);
+        assert.equal(await usdt.balanceOf(bob), 1497000);
+        assert.equal(await pair.pendingReward(), 3000);
     });
 
     it('dealWithGridOrders_notEnoughToken', async () => {
@@ -433,7 +483,28 @@ contract('LimitOrdersLogic', async (accounts) => {
     });
 
     it('withdrawReward', async () => {
-        // console.log('TODO');
+        const result = await pair.createGridOrder(pack({
+            priceLo: 30000.00,
+            priceHi: 60000.00,
+            stock  : 100,
+            money  : 30000 * 100,
+        }), { from: alice });
+        // const orderId = getOrderID(alice, result);
+        // let order = await pair.getGridOrder(orderId);
+        // console.log(order);
+
+        await usdt.transfer(bob, 6e6, { from: alice });
+        await pair.dealWithSellOrders(
+            60000n * priceDec,   // maxPrice,
+            [5424n],             // orderPosList
+            BigInt(6e6) << 96n | // moneyAmountIn
+            BigInt(101),         // maxGotStock
+            { from: bob },
+        );
+
+        assert.equal(await pair.pendingReward(), 12000);
+        await pair.withdrawReward();
+        assert.equal(await usdt.balanceOf(fiddy), 12000);
     });
 
 });
