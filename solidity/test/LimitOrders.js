@@ -12,6 +12,20 @@ const IERC20 = artifacts.require("IERC20");
 const _1e18 = 10n ** 18n;
 const priceDec = 10n ** 26n;
 
+// uncomment this to test against smartBCH
+// truffleAssert.reverts = async function(asyncFn, msg) {
+//     try {
+//         await asyncFn;
+//         throw null;
+//     } catch (e) {
+//         assert(e, "Expected an error but did not get one");
+//         // console.log(JSON.stringify(e));
+//         // console.log(e.receipt.outData);
+//         // console.log(web3.utils.hexToAscii('0x' + e.receipt.outData));
+//         assert.include(web3.utils.hexToAscii('0x' + e.receipt.outData), msg);
+//     }
+// };
+
 contract('LimitOrdersFactory', async (accounts) => {
 
     let logic;
@@ -45,7 +59,7 @@ contract('LimitOrdersFactory', async (accounts) => {
     
         await truffleAssert.reverts(
             factory.setFeeTo(accounts[3], {from: accounts[1]}),
-            "revert"
+            "not-feeto-setter"
         );
     });
 
@@ -53,10 +67,15 @@ contract('LimitOrdersFactory', async (accounts) => {
         const factory = await LimitOrdersFactory.new(accounts[0], {from: accounts[1]});
         assert.equal(await factory.feeToSetter(), accounts[1]);
 
+        await truffleAssert.reverts(
+            factory.changeFeeToSetter(accounts[2], {from: accounts[2]}),
+            "not-feeto-setter"
+        );
+
         await factory.changeFeeToSetter(accounts[2], {from: accounts[1]});
         await truffleAssert.reverts(
             factory.acceptFeeToSetter({from: accounts[3]}),
-            "revert"
+            "not-new-feeto-setter"
         );
 
         await factory.acceptFeeToSetter({from: accounts[2]});
@@ -607,21 +626,23 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
     it('createGridOrder_bchNotMatch', async () => {
         await usdt.transfer(bob, 5e8, { from: alice });
 
-        await truffleAssert.fails(
+        await truffleAssert.reverts(
             pair.createGridOrder(pack({
                 priceLo: 12345.67,
                 priceHi: 67890.12,
                 stock  : 1e8,
                 money  : 2e8,
-            }), { from: bob, value: 1e8 - 1 })
+            }), { from: bob, value: 1e8 - 1 }),
+            'value-mismatch'
         );
-        await truffleAssert.fails(
+        await truffleAssert.reverts(
             pair.createGridOrder(pack({
                 priceLo: 12345.67,
                 priceHi: 67890.12,
                 stock  : 1e8,
                 money  : 2e8,
-            }), { from: bob, value: 1e8 + 1 })
+            }), { from: bob, value: 1e8 + 1 }),
+            'value-mismatch'
         );
     });
 
@@ -706,23 +727,25 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
         assert.equal(order.indexInSellList, 0);
         assert.equal(order.indexInBuyList, 0);
 
-        await truffleAssert.fails(
+        await truffleAssert.reverts(
             pair.dealWithBuyOrders(
                 20000n * priceDec,   // minPrice,
                 [5324n],             // orderPosList
                 BigInt(100) << 96n | // stockAmountIn
                 BigInt(3e8),         // maxGotMoney
                 { from: bob, value: 99 },
-            )
+            ),
+            'value-mismatch'
         );
-        await truffleAssert.fails(
+        await truffleAssert.reverts(
             pair.dealWithBuyOrders(
                 20000n * priceDec,   // minPrice,
                 [5324n],             // orderPosList
                 BigInt(100) << 96n | // stockAmountIn
                 BigInt(3e8),         // maxGotMoney
                 { from: bob, value: 101 },
-            )
+            ),
+            'value-mismatch'
         );
     });
 

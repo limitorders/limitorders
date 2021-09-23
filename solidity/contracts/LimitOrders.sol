@@ -391,17 +391,17 @@ contract LimitOrdersFactory {
 	}
 
 	function changeFeeToSetter(address _newFeeToSetter) external {
-		require(msg.sender == feeToSetter);
+		require(msg.sender == feeToSetter, 'not-feeto-setter');
 		newFeeToSetter = _newFeeToSetter;
 	}
 
 	function acceptFeeToSetter() external {
-		require(msg.sender == newFeeToSetter);
+		require(msg.sender == newFeeToSetter, 'not-new-feeto-setter');
 		feeToSetter = newFeeToSetter;
 	}
 
 	function setFeeTo(address _feeTo) external {
-		require(msg.sender == feeToSetter);
+		require(msg.sender == feeToSetter, 'not-feeto-setter');
 		feeTo = _feeTo;
 	}
 
