@@ -7,6 +7,7 @@ const LimitOrdersLogic = artifacts.require("LimitOrdersLogic");
 const LimitOrdersProxy = artifacts.require("LimitOrdersProxy");
 const LimitOrdersFactory = artifacts.require("LimitOrdersFactory");
 const FakeToken = artifacts.require("FakeToken");
+const IERC20 = artifacts.require("IERC20");
 
 const _1e18 = 10n ** 18n;
 const priceDec = 10n ** 26n;
@@ -482,6 +483,42 @@ contract('LimitOrdersLogic', async (accounts) => {
         );
     });
 
+    it('dealWithGridOrders_sendBCH', async () => {
+        const result = await pair.createGridOrder(pack({
+            priceLo: 30000.00,
+            priceHi: 60000.00,
+            stock  : 100,
+            money  : 30000 * 100,
+        }), { from: alice });
+        // const orderId = getOrderID(alice, result);
+        // let order = await pair.getGridOrder(orderId);
+        // console.log(order);
+
+        await wbtc.transfer(bob, 500, { from: alice });
+        await usdt.transfer(bob, 500, { from: alice });
+
+        await truffleAssert.reverts(
+            pair.dealWithSellOrders(
+                50000n * priceDec,   // maxPrice,
+                [5424n],             // orderPosList
+                BigInt(400) << 96n | // moneyAmountIn
+                BigInt(1500000),     // maxGotStock
+                { from: bob, value: 123 },
+            ),
+            "dont-send-bch"
+        );
+        await truffleAssert.reverts(
+            pair.dealWithBuyOrders(
+                50000n * priceDec,   // minPrice,
+                [5324n],             // orderPosList
+                BigInt(400) << 96n | // stockAmountIn
+                BigInt(1500000),     // maxGotMoney
+                { from: bob, value: 123 },
+            ),
+            "dont-send-bch"
+        );
+    });
+
     it('withdrawReward', async () => {
         const result = await pair.createGridOrder(pack({
             priceLo: 30000.00,
@@ -508,6 +545,67 @@ contract('LimitOrdersLogic', async (accounts) => {
     });
 
 });
+
+/*
+contract('LimitOrdersLogic_SEP206', async (accounts) => {
+
+    const alice = accounts[0];
+    const bob   = accounts[1];
+    const fiddy = accounts[2];
+
+    let logic;
+    let factory;
+    let sbch;
+    let usdt;
+    let pair;
+
+    before(async () => {
+        logic = await LimitOrdersLogic.new();
+        factory = await LimitOrdersFactory.new(fiddy);
+        sbch = new IERC20("0x0000000000000000000000000000000000002711");
+    });
+
+    beforeEach(async () => {
+        const totalSupply = 10000000n * _1e18;
+        usdt = await FakeToken.new("USDT", totalSupply);
+        const result = await factory.create(sbch.address, usdt.address, logic.address);
+        const event = getPairCreatedEvent(result);
+        const pairAddr = event.pairAddr;
+        pair = await LimitOrdersLogic.at(pairAddr);
+        await sbch.approve(pair.address, totalSupply, { from: alice });
+        await sbch.approve(pair.address, totalSupply, { from: bob });
+        await usdt.approve(pair.address, totalSupply, { from: alice });
+        await usdt.approve(pair.address, totalSupply, { from: bob });
+    });
+
+    it('createGridOrder', async () => {
+        await usdt.transfer(bob, 5e8, { from: alice });
+
+        console.log('pair:', pair.address);
+        const result = await pair.createGridOrder(pack({
+            priceLo: 12345.67,
+            priceHi: 67890.12,
+            stock  : 1e8,
+            money  : 2e8,
+        }), { from: bob, value: 1e8 });
+        const orderId = getOrderID(bob, result);
+        const order = await pair.getGridOrder(orderId);
+        assert.equal(order.priceBaseLo, 548256975020389);
+        assert.equal(order.priceBaseHi, 376865667786415);
+        assert.equal(order.priceTickLo, 5196);
+        assert.equal(order.priceTickHi, 5442);
+        assert.equal(order.indexInSellList, 0);
+        assert.equal(order.indexInBuyList, 0);
+        assert.equal(order.stockAmount, 1e8);
+        assert.equal(order.moneyAmount, 2e8);
+        assert.equal(await pair.userOrderIdLists(bob, 0), orderId);
+        assert.equal(await pair.sellOrderIdLists(order.priceTickHi, 0), orderId);
+        assert.equal(await pair.buyOrderIdLists(order.priceTickLo, 0), orderId);
+        assert.equal(await usdt.balanceOf(bob), 3e8);
+    });
+
+});
+*/
 
 async function getUserOrderIDs(pair, addr) {
     let ids = [];

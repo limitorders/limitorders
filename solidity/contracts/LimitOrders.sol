@@ -103,7 +103,7 @@ contract LimitOrdersLogic {
 		require(success && ret, "trans-fail");
 	}
 
-	function safeReceive(address coinType, address sender, uint amount) internal returns (uint96) {
+	function safeReceive(address coinType, address sender, uint amount, bool excludesBCH) internal returns (uint96) {
 		if(amount == 0) {
 			return 0;
 		}
@@ -111,7 +111,7 @@ contract LimitOrdersLogic {
 		if(coinType == SEP206Contract) {
 			require(msg.value == amount, "value-mismatch");
 		} else {
-			require(msg.value == 0, "dont-send-bch");
+			require(!excludesBCH || msg.value == 0, "dont-send-bch");
 			uint oldBalance = IERC20(coinType).balanceOf(address(this));
 			IERC20(coinType).transferFrom(sender, address(this), uint(amount));
 			uint newBalance = IERC20(coinType).balanceOf(address(this));
@@ -134,8 +134,8 @@ contract LimitOrdersLogic {
 		order.stockAmount = uint96(packedOrder >> 64);
 		order.moneyAmount = uint96(packedOrder >> (64+96));
 		require(order.stockAmount != 0 || order.moneyAmount != 0, "zero-amount");
-		order.stockAmount = safeReceive(stock, msg.sender, order.stockAmount);
-		order.moneyAmount = safeReceive(money, msg.sender, order.moneyAmount);
+		order.stockAmount = safeReceive(stock, msg.sender, order.stockAmount, false);
+		order.moneyAmount = safeReceive(money, msg.sender, order.moneyAmount, false);
 
 		uint orderId = (uint(uint160(bytes20(msg.sender)))<<96)|(uint(block.number)<<32);
 		while(getGridOrder(orderId).priceBaseHi != 0) {
@@ -213,7 +213,7 @@ contract LimitOrdersLogic {
 				    uint moneyAmountIn_maxGotStock) external payable {
 		uint moneyAmountIn = moneyAmountIn_maxGotStock>>96;
 		uint maxGotStock = uint96(moneyAmountIn_maxGotStock);
-		uint totalMoneyAmount = safeReceive(money, msg.sender, moneyAmountIn);
+		uint totalMoneyAmount = safeReceive(money, msg.sender, moneyAmountIn, true);
 		uint fee0 = totalMoneyAmount * 2 / 1000; // 0.2% fee
 		uint moneyAmount0 = totalMoneyAmount - fee0;
 		uint moneyAmount = moneyAmount0;
@@ -279,7 +279,7 @@ contract LimitOrdersLogic {
 				   uint stockAmountIn_maxGotMoney) external payable {
 		uint stockAmountIn = stockAmountIn_maxGotMoney>>96;
 		uint maxGotMoney = uint96(stockAmountIn_maxGotMoney);
-		uint stockAmount = safeReceive(stock, msg.sender, stockAmountIn);
+		uint stockAmount = safeReceive(stock, msg.sender, stockAmountIn, true);
 		uint stockAmount0 = stockAmount;
 		uint gotMoney = 0;
 		for(uint i=0; i<orderPosList.length; i++) {
