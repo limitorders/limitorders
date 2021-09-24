@@ -43,14 +43,37 @@ export default {
   methods: {
   },
   async mounted() {
+    if (typeof window.ethereum === 'undefined') {
+      alertNoWallet()
+      return
+    }
+    const provider = new ethers.providers.Web3Provider(window.ethereum)
+    const signer = provider.getSigner()
+    this.myAddress = await signer.getAddress()
+
     const currMarket = localStorage.getItem('currMarket');
     this.hasCurrentMarket = (currMarket !== null);
     if(this.hasCurrentMarket) {
       const marketArr = currMarket.split(",")
       this.stockSymbol = marketArr[0]
       this.moneySymbol = marketArr[1]
-      this.stockURL = "https://www.smartscan.cash/address/"+marketArr[2]
-      this.moneyURL = "https://www.smartscan.cash/address/"+marketArr[3]
+      const stockAddr = marketArr[2]
+      const moneyAddr = marketArr[3]
+      this.stockURL = "https://www.smartscan.cash/address/"+stockAddr
+      this.moneyURL = "https://www.smartscan.cash/address/"+moneyAddr
+
+      const stockContract = new ethers.Contract(stockAddr, SEP20ABI, provider)
+      const moneyContract = new ethers.Contract(moneyAddr, SEP20ABI, provider)
+      try {
+	var balanceAmt = await stockContract.balanceOf(this.myAddress)
+        var decimals = await stockContract.decimals()
+        this.stockAmount = ethers.utils.formatUnits(balanceAmt, decimals)
+	balanceAmt = await moneyContract.balanceOf(this.myAddress)
+        decimals = await moneyContract.decimals()
+        this.moneyAmount = ethers.utils.formatUnits(balanceAmt, decimals)
+      } catch(e) {
+        console.log(e)
+      }
     } else {
       alert("You have set current market! Please enter a market first before exchanging coins.")
     }

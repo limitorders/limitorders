@@ -13,7 +13,7 @@
     <template v-for="(entry, idx) in markets" :keys="entry.fullInfo">
       <tr><td>
       <code><a v-bind:href="entry.stockURL">{{entry.stockSymbol}}</a>/<a v-bind:href="entry.moneyURL">{{entry.moneySymbol}}</a></code>&nbsp;</td><td>
-      <button @click="enter" v-bind:name="entry.fullInfo"
+      <button @click="enterOldMarket" v-bind:name="entry.fullInfo"
       style="font-size:20px; width: 80px;">enter</button>&nbsp;
       <button @click="remove" v-bind:name="entry.fullInfo"
       style="font-size:20px; width: 80px;">remove</button>
@@ -34,6 +34,19 @@ input {
 </style>
 
 <script>
+async function createMarket(stockAddr, moneyAddr) {
+  const abi = ["function create(address stock, address money, address impl) external"];
+  const provider = new ethers.providers.Web3Provider(window.ethereum)
+  const signer = provider.getSigner()
+  const factoryContract = new ethers.Contract(FactoryAddress, abi, provider).connect(signer)
+  try {
+    const receipt = await factoryContract.create(stockAddr, moneyAddr, LogicAddress);
+    console.log("createMarket", receipt)
+  } catch(e) {
+    alert("Error! "+e.toString())
+  }
+}
+
 export default {
   data() {
     return {
@@ -71,19 +84,40 @@ export default {
         alert("Error when reading the money token's symbols. Maybe "+moneyAddr+" is not a SEP20 token's address?")
 	console.log(e)
       }
+      const marketAddress = getMarketAddress(this.stockAddr, this.moneyAddr)
+      const code = await provider.getCode(marketAddress)
+      console.log("marketAddress", marketAddress, code)
+      if(code == "0x") {
+        const ok = confirm("The market "+this.stockSymbol+"/"+this.moneySymbol+" has not been created. Do you want to create it?")
+	if(ok) {
+	  alert("The transaction for creating market will be sent. Please re-enter after this transaction is confirmed")
+	  createMarket(this.stockAddr, this.moneyAddr)
+	}
+	return
+      }
       var marketStr = this.stockSymbol+","+this.moneySymbol+","+this.stockAddr+","+this.moneyAddr
       localStorage.setItem('currMarket', marketStr)
-      localStorage.setItem(marketStr, Math.floor(Date.now()/1000))
+      localStorage.setItem('M:'+marketStr, Math.floor(Date.now()/1000))
       this.hasCurrentMarket = true
       alert("Now, the current market is "+this.stockSymbol+"/"+this.moneySymbol)
     },
     async unsetCurr() {
       localStorage.removeItem('currMarket')
+      //var delList = []
+      //for(var i=0; i<localStorage.length; i++) {
+      //  var key = localStorage.key(i)
+      //  if(key.startsWith('M:')) {
+      //    delList.push(key)
+      //  }
+      //}
+      //for(var i=0; i<delList.length; i++) {
+      //  localStorage.removeItem(delList[i])
+      //}
     },
-    async enter(event) {
+    async enterOldMarket(event) {
       const marketStr = event.target.name
       localStorage.setItem('currMarket', marketStr)
-      localStorage.setItem(marketStr, Math.floor(Date.now()/1000))
+      localStorage.setItem('M:'+marketStr, Math.floor(Date.now()/1000))
       const marketArr = marketStr.split(",")
       this.stockSymbol = marketArr[0]
       this.moneySymbol = marketArr[1]
@@ -104,7 +138,7 @@ export default {
 	  break
 	}
       }
-      localStorage.removeItem(event.target.name)
+      localStorage.removeItem('M:'+event.target.name)
     }
   },
   async mounted() {
@@ -118,13 +152,15 @@ export default {
       this.moneyURL = "https://www.smartscan.cash/address/"+marketArr[3]
     }
 
-    this.hasHistory = localStorage.length > 1
     var markets = []
     for(var i=0; i<localStorage.length; i++) {
-      const marketStr = localStorage.key(i)
-      if(marketStr == 'currMarket') {
+      var marketStr = localStorage.key(i)
+      console.log("marketStr", marketStr)
+      if(marketStr == 'currMarket' || !marketStr.startsWith('M:')) {
         continue
       }
+      this.hasHistory = true
+      marketStr = marketStr.substr(2) //to remove 'M:' prefix
       var timestamp = localStorage.getItem(marketStr)
       const marketArr = marketStr.split(",")
       var entry = {

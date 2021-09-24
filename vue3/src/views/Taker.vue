@@ -12,7 +12,6 @@
       <label for="sell" @click="toSell" v-bind:style="picked=='Sell'? 'font-weight: bold; text-decoration: underline;': ''">
       I Want to Sell {{stockSymbol}}</label>
     </p>
-    <br/>
     <div v-if="picked=='Buy'">
       <table style="margin: auto">
       <tr><td><code>&nbsp;Buy Price ({{moneySymbol}}): </code></td>
@@ -20,7 +19,8 @@
       <tr><td><code>&nbsp;Buy Amount ({{stockSymbol}}): </code></td>
       <td><input v-model="buyAmount" type="number"></td></tr>
       </table>
-      <p style="text-align: center"><button @click="buy"><code> &nbsp;Buy!</code></button>
+      <p style="text-align: center;"><button @click="buy" style="font-size: 24px">
+      <code> &nbsp;Buy!</code></button>
       </p>
     </div>
     <div v-else>
@@ -30,7 +30,8 @@
       <tr><td><code>Sell Amount ({{stockSymbol}}): </code></td>
       <td><input v-model="sellAmount" type="number"></td></tr>
       </table>
-      <p style="text-align: center"><button @click="buy"><code> Sell!</code></button>
+      <p style="text-align: center;"><button @click="sell" style="font-size: 24px">
+      <code> Sell!</code></button>
       </p>
     </div>
     <hr/>
@@ -51,6 +52,8 @@ export default {
       sellPrice: 0,
       stockSymbol: "",
       moneySymbol: "",
+      stockAmount: 0,
+      moneyAmount: 0,
       stockURL: "",
       moneyURL: "",
       picked: 'Buy',
@@ -59,21 +62,44 @@ export default {
   },
   methods: {
      toBuy() {
-       this.picked="buy"
+       this.picked="Buy"
      },
      toSell() {
-       this.picked="sell"
+       this.picked="Sell"
      }
   },
   async mounted() {
+    if (typeof window.ethereum === 'undefined') {
+      alertNoWallet()
+      return
+    }
+    const provider = new ethers.providers.Web3Provider(window.ethereum)
+    const signer = provider.getSigner()
+    this.myAddress = await signer.getAddress()
+
     const currMarket = localStorage.getItem('currMarket');
     this.hasCurrentMarket = (currMarket !== null);
     if(this.hasCurrentMarket) {
       const marketArr = currMarket.split(",")
       this.stockSymbol = marketArr[0]
       this.moneySymbol = marketArr[1]
-      this.stockURL = "https://www.smartscan.cash/address/"+marketArr[2]
-      this.moneyURL = "https://www.smartscan.cash/address/"+marketArr[3]
+      const stockAddr = marketArr[2]
+      const moneyAddr = marketArr[3]
+      this.stockURL = "https://www.smartscan.cash/address/"+stockAddr
+      this.moneyURL = "https://www.smartscan.cash/address/"+moneyAddr
+
+      const stockContract = new ethers.Contract(stockAddr, SEP20ABI, provider)
+      const moneyContract = new ethers.Contract(moneyAddr, SEP20ABI, provider)
+      try {
+	var balanceAmt = await stockContract.balanceOf(this.myAddress)
+        var decimals = await stockContract.decimals()
+        this.stockAmount = ethers.utils.formatUnits(balanceAmt, decimals)
+	balanceAmt = await moneyContract.balanceOf(this.myAddress)
+        decimals = await moneyContract.decimals()
+        this.moneyAmount = ethers.utils.formatUnits(balanceAmt, decimals)
+      } catch(e) {
+        console.log(e)
+      }
     } else {
       alert("You have set current market! Please enter a market first before exchanging coins.")
     }
