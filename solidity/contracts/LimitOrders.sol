@@ -19,12 +19,11 @@ interface IFeeTo {
 	function feeTo() external returns (address);
 }
 
-contract LimitOrdersLogic {
+abstract contract LimitOrdersLogicBase {
 	address public stock;
 	address public money;
 	address public factory;
 
-	mapping(uint => GridOrder) public gridOrders;
 	mapping(address => uint[]) public userOrderIdLists;
 	uint public pendingReward;
 
@@ -81,17 +80,9 @@ contract LimitOrdersLogic {
 		priceBase = uint64(beforeAdjust * (BASE+adjust) / BASE);
 	}
 
-	function getGridOrder(uint id) public view returns (GridOrder memory order) {
-		return gridOrders[id];
-	}
-
-	function setGridOrder(uint id, GridOrder memory order) internal {
-		gridOrders[id] = order;
-	}
-
-	function deleteGridOrder(uint id) internal {
-		delete gridOrders[id];
-	}
+	function getGridOrder(uint id) public virtual returns (GridOrder memory order);
+	function setGridOrder(uint id, GridOrder memory order) virtual internal;
+	function deleteGridOrder(uint id) virtual internal;
 
 	function safeTransfer(address coinType, address receiver, uint amount) internal {
 		if(amount == 0) {
@@ -342,6 +333,78 @@ contract LimitOrdersLogic {
 		address receiver = IFeeTo(factory).feeTo();
 		safeTransfer(money, receiver, pendingReward);
 		pendingReward = 0;
+	}
+}
+
+contract LimitOrdersLogic is LimitOrdersLogicBase {
+	mapping(uint => GridOrder) public gridOrders;
+
+	function getGridOrder(uint id) public view override returns (GridOrder memory order) {
+		return gridOrders[id];
+	}
+
+	function setGridOrder(uint id, GridOrder memory order) override internal {
+		gridOrders[id] = order;
+	}
+
+	function deleteGridOrder(uint id) override internal {
+		delete gridOrders[id];
+	}
+}
+
+contract LimitOrdersLogicForSmartBCH is LimitOrdersLogicBase {
+	address constant SEP101Contract = address(bytes20(uint160(0x2712)));
+	
+	function getGridOrder(uint id) public override returns (GridOrder memory order) {
+		bytes memory idBz = abi.encode(id);
+		(bool success, bytes memory data) = SEP101Contract.delegatecall(
+			abi.encodeWithSignature("get(bytes)", idBz));
+
+		require(success && (data.length == 32*2 || data.length == 32*4));
+		if (data.length == 32*2) {
+			order.priceTickLo = 0;
+			return order;
+		}
+
+		bytes memory vaultBz;
+		assembly { vaultBz := add(data, 64) }
+
+		(uint w0, uint w1) = abi.decode(vaultBz, (uint, uint));
+		order.priceBaseLo = uint64(w0);
+		order.priceBaseHi = uint64(w0>>64);
+		order.priceTickLo = uint16(w0>>128);
+		order.priceTickHi = uint16(w0>>(128+16));
+		order.indexInSellList = uint32(w1);
+		order.indexInBuyList = uint32(w1>>32);
+		order.stockAmount = uint96(w1>>64);
+		order.moneyAmount = uint96(w1>>(64+96));
+	}
+
+	function setGridOrder(uint id, GridOrder memory order) override internal {
+		bytes memory idBz = abi.encode(id);
+		(uint w0, uint w1) = (0, 0);
+		w0 = uint(order.priceBaseLo);
+		w0 = (w0<<64) | uint(order.priceBaseHi);
+		w0 = (w0<<64) | uint(order.priceTickLo);
+		w0 = (w0<<16) | uint(order.priceTickHi);
+
+		w1 = uint(order.indexInSellList);
+		w1 = (w1<<32) | uint(order.indexInBuyList);
+		w1 = (w1<<32) | uint(order.stockAmount);
+		w1 = (w1<<96) | uint(order.moneyAmount);
+
+		bytes memory vaultBz = abi.encode(w0, w1);
+		(bool success, bytes memory _notUsed) = SEP101Contract.delegatecall(
+			abi.encodeWithSignature("set(bytes,bytes)", idBz, vaultBz));
+		require(success, "SEP101_SET_FAIL");
+	}
+
+	function deleteGridOrder(uint id) override internal {
+		bytes memory idBz = abi.encode(id);
+		bytes memory vaultBz = new bytes(0); //writing zero-length bytes is for deletion
+		(bool success, bytes memory _notUsed) = SEP101Contract.delegatecall(
+			abi.encodeWithSignature("set(bytes,bytes)", idBz, vaultBz));
+		require(success, "SEP101_DEL_FAIL");
 	}
 }
 
