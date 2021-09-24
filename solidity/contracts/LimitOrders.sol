@@ -370,27 +370,29 @@ contract LimitOrdersLogicForSmartBCH is LimitOrdersLogicBase {
 		assembly { vaultBz := add(data, 64) }
 
 		(uint w0, uint w1) = abi.decode(vaultBz, (uint, uint));
-		order.priceBaseLo = uint64(w0);
-		order.priceBaseHi = uint64(w0>>64);
-		order.priceTickLo = uint16(w0>>128);
-		order.priceTickHi = uint16(w0>>(128+16));
-		order.indexInSellList = uint32(w1);
-		order.indexInBuyList = uint32(w1>>32);
-		order.stockAmount = uint96(w1>>64);
-		order.moneyAmount = uint96(w1>>(64+96));
+		order.priceBaseLo     = uint64(w0>> 96);
+		order.priceBaseHi     = uint64(w0>> 32);
+		order.priceTickLo     = uint16(w0>> 16);
+		order.priceTickHi     = uint16(w0>>  0);
+		order.indexInSellList = uint32(w1>>224);
+		order.indexInBuyList  = uint32(w1>>192);
+		order.stockAmount     = uint96(w1>> 96);
+		order.moneyAmount     = uint96(w1>>  0);
 	}
 
+	// w0[blank(96)|priceBaseLo(64)|priceBaseHi(64)|priceTickLo(16)|priceTickHi(16)]
+	// w1[indexInSellList(32)|indexInBuyList(32)|stockAmount(96)|moneyAmount(96)]
 	function setGridOrder(uint id, GridOrder memory order) override internal {
 		bytes memory idBz = abi.encode(id);
 		(uint w0, uint w1) = (0, 0);
 		w0 = uint(order.priceBaseLo);
 		w0 = (w0<<64) | uint(order.priceBaseHi);
-		w0 = (w0<<64) | uint(order.priceTickLo);
+		w0 = (w0<<16) | uint(order.priceTickLo);
 		w0 = (w0<<16) | uint(order.priceTickHi);
 
 		w1 = uint(order.indexInSellList);
 		w1 = (w1<<32) | uint(order.indexInBuyList);
-		w1 = (w1<<32) | uint(order.stockAmount);
+		w1 = (w1<<96) | uint(order.stockAmount);
 		w1 = (w1<<96) | uint(order.moneyAmount);
 
 		bytes memory vaultBz = abi.encode(w0, w1);

@@ -1,9 +1,13 @@
+// console.log(process.argv.join('='));
+const IsSBCH = process.argv.join('=').includes('--network=sbch_');
+console.log('IsSBCH:', IsSBCH);
+
 const timeMachine = require('ganache-time-traveler');
 const truffleAssert = require('truffle-assertions');
 const unpackPrice = require("./price.js").unpackPrice;
 const packPrice = require("./price.js").packPrice;
 
-const LimitOrdersLogic = artifacts.require("LimitOrdersLogic");
+let   LimitOrdersLogic = artifacts.require("LimitOrdersLogic");
 const LimitOrdersProxy = artifacts.require("LimitOrdersProxy");
 const LimitOrdersFactory = artifacts.require("LimitOrdersFactory");
 const FakeToken = artifacts.require("FakeToken");
@@ -12,19 +16,21 @@ const IERC20 = artifacts.require("IERC20");
 const _1e18 = 10n ** 18n;
 const priceDec = 10n ** 26n;
 
-// uncomment this to test against smartBCH
-// truffleAssert.reverts = async function(asyncFn, msg) {
-//     try {
-//         await asyncFn;
-//         throw null;
-//     } catch (e) {
-//         assert(e, "Expected an error but did not get one");
-//         // console.log(JSON.stringify(e));
-//         // console.log(e.receipt.outData);
-//         // console.log(web3.utils.hexToAscii('0x' + e.receipt.outData));
-//         assert.include(web3.utils.hexToAscii('0x' + e.receipt.outData), msg);
-//     }
-// };
+if (IsSBCH) {
+    LimitOrdersLogic = artifacts.require("LimitOrdersLogicForSmartBCH");
+    truffleAssert.reverts = async function(asyncFn, msg) {
+        try {
+            await asyncFn;
+            throw null;
+        } catch (e) {
+            assert(e, "Expected an error but did not get one");
+            // console.log(JSON.stringify(e));
+            // console.log(e.receipt.outData);
+            // console.log(web3.utils.hexToAscii('0x' + e.receipt.outData));
+            assert.include(web3.utils.hexToAscii('0x' + e.receipt.outData), msg);
+        }
+    };
+}
 
 contract('LimitOrdersFactory', async (accounts) => {
 
@@ -128,7 +134,8 @@ contract('LimitOrdersLogic', async (accounts) => {
             money  : 2e8,
         }), { from: bob });
         const orderId = getOrderID(bob, result);
-        const order = await pair.getGridOrder(orderId);
+        const order = await pair.getGridOrder.call(orderId);
+        // console.log(order);
         assert.equal(order.priceBaseLo, 548256975020389);
         assert.equal(order.priceBaseHi, 376865667786415);
         assert.equal(order.priceTickLo, 5196);
@@ -192,9 +199,9 @@ contract('LimitOrdersLogic', async (accounts) => {
         assert.deepEqual(await getSellOrderIDs(pair, 5397), [orderID0, orderID2]);
         assert.deepEqual(await getBuyOrderIDs(pair, 5365), [orderID0, orderID2]);
 
-        const order1 = await pair.getGridOrder(orderID1);
+        const order1 = await pair.getGridOrder.call(orderID1);
         assert.equal(order1.priceTickLo, 0);
-        const order2 = await pair.getGridOrder(orderID2);
+        const order2 = await pair.getGridOrder.call(orderID2);
         assert.equal(order2.priceTickLo, 5365);
         assert.equal(order2.priceTickHi, 5397);
         assert.equal(order2.indexInSellList, 1);
@@ -212,10 +219,11 @@ contract('LimitOrdersLogic', async (accounts) => {
         assert.deepEqual(await getUserOrderIDs(pair, alice), [orderId]);
         assert.deepEqual(await getUserOrderIDs(pair, bob), []);
 
-        await truffleAssert.reverts(pair.cancelGridOrder(0, {from: bob}), "revert");
-        await truffleAssert.reverts(pair.cancelGridOrder(1, {from: bob}), "revert");
-        await truffleAssert.reverts(pair.cancelGridOrder(1, {from: alice}), "revert");
-        await truffleAssert.reverts(pair.cancelGridOrder(2, {from: alice}), "revert");
+        const msg = IsSBCH ? "" : "revert";
+        await truffleAssert.reverts(pair.cancelGridOrder(0, {from: bob}), msg);
+        await truffleAssert.reverts(pair.cancelGridOrder(1, {from: bob}), msg);
+        await truffleAssert.reverts(pair.cancelGridOrder(1, {from: alice}), msg);
+        await truffleAssert.reverts(pair.cancelGridOrder(2, {from: alice}), msg);
     });
 
     it('dealWithSellOrders', async () => {
@@ -276,7 +284,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             money  : 0,
         }), { from: alice });
         const orderId = getOrderID(alice, result1);
-        let order = await pair.getGridOrder(orderId);
+        let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
         assert.equal(order.priceTickLo, 5365);
         assert.equal(order.priceTickHi, 5397);
@@ -292,7 +300,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             { from: bob },
         );
 
-        order = await pair.getGridOrder(orderId);
+        order = await pair.getGridOrder.call(orderId);
         assert.equal(order.stockAmount, 0);
         assert.equal(order.moneyAmount, 29998632);
 
@@ -309,7 +317,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             money  : 0,
         }), { from: alice });
         const orderId = getOrderID(alice, result1);
-        let order = await pair.getGridOrder(orderId);
+        let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
         assert.equal(order.priceTickLo, 5365);
         assert.equal(order.priceTickHi, 5397);
@@ -325,7 +333,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             { from: bob },
         );
 
-        order = await pair.getGridOrder(orderId);
+        order = await pair.getGridOrder.call(orderId);
         assert.equal(order.stockAmount, 301);
         assert.equal(order.moneyAmount, 14970000);
 
@@ -342,7 +350,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             money  : 0,
         }), { from: alice });
         const orderId = getOrderID(alice, result1);
-        let order = await pair.getGridOrder(orderId);
+        let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
         assert.equal(order.priceTickLo, 5365);
         assert.equal(order.priceTickHi, 5397);
@@ -358,7 +366,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             { from: bob },
         );
 
-        order = await pair.getGridOrder(orderId);
+        order = await pair.getGridOrder.call(orderId);
         assert.equal(order.stockAmount, 300);
         assert.equal(order.moneyAmount, 14999316);
 
@@ -375,7 +383,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             money  : 30000 * 100,
         }), { from: alice });
         const orderId = getOrderID(alice, result1);
-        let order = await pair.getGridOrder(orderId);
+        let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
         assert.equal(order.priceTickLo, 5324);
         assert.equal(order.priceTickHi, 5424);
@@ -391,7 +399,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             { from: bob },
         );
 
-        order = await pair.getGridOrder(orderId);
+        order = await pair.getGridOrder.call(orderId);
         assert.equal(order.stockAmount, 100);
         assert.equal(order.moneyAmount, 0);
 
@@ -408,7 +416,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             money  : 30000 * 100,
         }), { from: alice });
         const orderId = getOrderID(alice, result1);
-        let order = await pair.getGridOrder(orderId);
+        let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
         assert.equal(order.priceTickLo, 5324);
         assert.equal(order.priceTickHi, 5424);
@@ -424,7 +432,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             { from: bob },
         );
 
-        order = await pair.getGridOrder(orderId);
+        order = await pair.getGridOrder.call(orderId);
         assert.equal(order.stockAmount, 50);
         assert.equal(order.moneyAmount, 1500006);
 
@@ -441,7 +449,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             money  : 30000 * 100,
         }), { from: alice });
         const orderId = getOrderID(alice, result1);
-        let order = await pair.getGridOrder(orderId);
+        let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
         assert.equal(order.priceTickLo, 5324);
         assert.equal(order.priceTickHi, 5424);
@@ -457,7 +465,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             { from: bob },
         );
 
-        order = await pair.getGridOrder(orderId);
+        order = await pair.getGridOrder.call(orderId);
         assert.equal(order.stockAmount, 50);
         assert.equal(order.moneyAmount, 1500000);
 
@@ -474,7 +482,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             money  : 30000 * 100,
         }), { from: alice });
         // const orderId = getOrderID(alice, result);
-        // let order = await pair.getGridOrder(orderId);
+        // let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
 
         await wbtc.transfer(bob, 500, { from: alice });
@@ -510,7 +518,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             money  : 30000 * 100,
         }), { from: alice });
         // const orderId = getOrderID(alice, result);
-        // let order = await pair.getGridOrder(orderId);
+        // let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
 
         await wbtc.transfer(bob, 500, { from: alice });
@@ -546,7 +554,7 @@ contract('LimitOrdersLogic', async (accounts) => {
             money  : 30000 * 100,
         }), { from: alice });
         // const orderId = getOrderID(alice, result);
-        // let order = await pair.getGridOrder(orderId);
+        // let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
 
         await usdt.transfer(bob, 6e6, { from: alice });
@@ -608,7 +616,7 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
             money  : 2e8,
         }), { from: bob, value: 1e8 });
         const orderId = getOrderID(bob, result);
-        const order = await pair.getGridOrder(orderId);
+        const order = await pair.getGridOrder.call(orderId);
         assert.equal(order.priceBaseLo, 548256975020389);
         assert.equal(order.priceBaseHi, 376865667786415);
         assert.equal(order.priceTickLo, 5196);
@@ -647,6 +655,10 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
     });
 
     it('dealWithSellOrders_buyAll', async () => {
+        if (!IsSBCH) {
+            return;
+        }
+
         const result1 = await pair.createGridOrder(pack({
             priceLo: 40000.00,
             priceHi: 50000.00,
@@ -654,7 +666,7 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
             money  : 0,
         }), { from: alice, value: 600 });
         const orderId = getOrderID(alice, result1);
-        let order = await pair.getGridOrder(orderId);
+        let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
         assert.equal(order.priceTickLo, 5365);
         assert.equal(order.priceTickHi, 5397);
@@ -670,7 +682,7 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
             { from: bob },
         );
 
-        order = await pair.getGridOrder(orderId);
+        order = await pair.getGridOrder.call(orderId);
         assert.equal(order.stockAmount, 0);
         assert.equal(order.moneyAmount, 29998632);
 
@@ -687,7 +699,7 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
             money  : 30000 * 100,
         }), { from: alice });
         const orderId = getOrderID(alice, result1);
-        let order = await pair.getGridOrder(orderId);
+        let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
         assert.equal(order.priceTickLo, 5324);
         assert.equal(order.priceTickHi, 5424);
@@ -703,7 +715,7 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
             { from: bob, value: 100 },
         );
 
-        order = await pair.getGridOrder(orderId);
+        order = await pair.getGridOrder.call(orderId);
         assert.equal(order.stockAmount, 100);
         assert.equal(order.moneyAmount, 0);
 
@@ -720,7 +732,7 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
             money  : 30000 * 100,
         }), { from: alice });
         const orderId = getOrderID(alice, result1);
-        let order = await pair.getGridOrder(orderId);
+        let order = await pair.getGridOrder.call(orderId);
         // console.log(order);
         assert.equal(order.priceTickLo, 5324);
         assert.equal(order.priceTickHi, 5424);
