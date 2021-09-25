@@ -28,8 +28,8 @@ abstract contract LimitOrdersLogicBase {
 	uint public pendingReward;
 
 	uint constant TICK_COUNT = 7900;
-	uint[TICK_COUNT/256] public sellOrderMaskWords;
-	uint[TICK_COUNT/256] public buyOrderMaskWords;
+	uint[(TICK_COUNT+255)/256] public sellOrderMaskWords;
+	uint[(TICK_COUNT+255)/256] public buyOrderMaskWords;
 	uint[][TICK_COUNT] public sellOrderIdLists;
 	uint[][TICK_COUNT] public buyOrderIdLists;
 
