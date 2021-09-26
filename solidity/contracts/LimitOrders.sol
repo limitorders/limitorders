@@ -94,7 +94,7 @@ abstract contract LimitOrdersLogicBase {
 		require(success && ret, "trans-fail");
 	}
 
-	function safeReceive(address coinType, address sender, uint amount, bool excludesBCH) internal returns (uint96) {
+	function safeReceive(address coinType, address sender, uint amount, bool bchExclusive) internal returns (uint96) {
 		if(amount == 0) {
 			return 0;
 		}
@@ -102,7 +102,7 @@ abstract contract LimitOrdersLogicBase {
 		if(coinType == SEP206Contract) {
 			require(msg.value == amount, "value-mismatch");
 		} else {
-			require(!excludesBCH || msg.value == 0, "dont-send-bch");
+			require(!bchExclusive || msg.value == 0, "dont-send-bch");
 			uint oldBalance = IERC20(coinType).balanceOf(address(this));
 			IERC20(coinType).transferFrom(sender, address(this), uint(amount));
 			uint newBalance = IERC20(coinType).balanceOf(address(this));
@@ -125,8 +125,9 @@ abstract contract LimitOrdersLogicBase {
 		order.stockAmount = uint96(packedOrder >> 64);
 		order.moneyAmount = uint96(packedOrder >> (64+96));
 		require(order.stockAmount != 0 || order.moneyAmount != 0, "zero-amount");
-		order.stockAmount = safeReceive(stock, msg.sender, order.stockAmount, false);
-		order.moneyAmount = safeReceive(money, msg.sender, order.moneyAmount, false);
+		bool bchExclusive = stock != SEP206Contract && money != SEP206Contract;
+		order.stockAmount = safeReceive(stock, msg.sender, order.stockAmount, bchExclusive);
+		order.moneyAmount = safeReceive(money, msg.sender, order.moneyAmount, bchExclusive);
 
 		uint orderId = (uint(uint160(bytes20(msg.sender)))<<96)|(uint(block.number)<<32);
 		while(getGridOrder(orderId).priceBaseHi != 0) {

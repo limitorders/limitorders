@@ -177,6 +177,17 @@ contract('LimitOrdersLogic', async (accounts) => {
         );
     });
 
+    it('createGridOrder_sendBCH', async () => {
+        await wbtc.transfer(bob, 123, { from: alice });
+        await usdt.transfer(bob, 456, { from: alice });
+        await truffleAssert.reverts(
+            pair.createGridOrder(
+                pack({priceLo: 12345, priceHi: 54321, stock: 1, money: 1}), 
+                { from: bob, value: 999 }),
+            "dont-send-bch"
+        );
+    });
+
     it('cancelGridOrder', async () => {
         await wbtc.transfer(bob, 6e8, { from: alice });
         await usdt.transfer(bob, 6e8, { from: alice });
