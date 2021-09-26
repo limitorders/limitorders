@@ -188,6 +188,26 @@ contract('LimitOrdersLogic', async (accounts) => {
         );
     });
 
+    it('getUserOrders', async () => {
+        await wbtc.transfer(bob, 6e8, { from: alice });
+        await usdt.transfer(bob, 6e8, { from: alice });
+
+        const o0 = await createGridOrder(pair, bob, {priceLo: 10000, priceHi: 20000, stock: 1e5, money: 1e5});
+        const o1 = await createGridOrder(pair, bob, {priceLo: 20000, priceHi: 30000, stock: 2e5, money: 2e5});
+        const o2 = await createGridOrder(pair, bob, {priceLo: 30000, priceHi: 40000, stock: 3e5, money: 3e5});
+        const o3 = await createGridOrder(pair, bob, {priceLo: 40000, priceHi: 50000, stock: 3e5, money: 3e5});
+        const o4 = await createGridOrder(pair, bob, {priceLo: 50000, priceHi: 60000, stock: 3e5, money: 3e5});
+
+        assert.deepEqual(await getUserOrderIDs(pair, bob, 0, '0'), []);
+        assert.deepEqual(await getUserOrderIDs(pair, bob, 0, 1), [o0]);
+        assert.deepEqual(await getUserOrderIDs(pair, bob, 0, 2), [o0, o1]);
+        assert.deepEqual(await getUserOrderIDs(pair, bob, 0, 3), [o0, o1, o2]);
+        assert.deepEqual(await getUserOrderIDs(pair, bob, 0, 4), [o0, o1, o2, o3]);
+        assert.deepEqual(await getUserOrderIDs(pair, bob, 1, 4), [o1, o2, o3]);
+        assert.deepEqual(await getUserOrderIDs(pair, bob, 2, 5), [o2, o3, o4]);
+        assert.deepEqual(await getUserOrderIDs(pair, bob, 3, 6), [o3, o4]);
+    });
+
     it('cancelGridOrder', async () => {
         await wbtc.transfer(bob, 6e8, { from: alice });
         await usdt.transfer(bob, 6e8, { from: alice });
@@ -776,16 +796,22 @@ async function createGridOrder(pair, addr, args) {
     return getOrderID(addr, result);
 }
 
-async function getUserOrderIDs(pair, addr) {
-    let orders = await pair.getUserOrders.call(addr, 0, 99);
+async function getUserOrderIDs(pair, addr, start, end) {
+    start = start || 0;
+    end = end || 99;
+    let orders = await pair.getUserOrders.call(addr, start, end);
     return orders.map(x => BigInt(x[0].toString()));
 }
-async function getSellOrderIDs(pair, tick) {
-    let orders = await pair.getSellOrders.call(tick, 0, 99);
+async function getSellOrderIDs(pair, tick, start, end) {
+    start = start || 0;
+    end = end || 99;
+    let orders = await pair.getSellOrders.call(tick, start, end);
     return orders.map(x => BigInt(x[0].toString()));
 }
-async function getBuyOrderIDs(pair, tick) {
-    let orders = await pair.getBuyOrders.call(tick, 0, 99);
+async function getBuyOrderIDs(pair, tick, start, end) {
+    start = start || 0;
+    end = end || 99;
+    let orders = await pair.getBuyOrders.call(tick, start, end);
     return orders.map(x => BigInt(x[0].toString()));
 }
 

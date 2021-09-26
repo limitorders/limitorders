@@ -99,7 +99,7 @@ abstract contract LimitOrdersLogicBase {
 		for(uint i=start; i<end; i++) {
 			uint id = orderIdList[i];
 			GridOrder memory order = getGridOrder(id);
-			orders[i] = orderToArray(order, id);
+			orders[i-start] = orderToArray(order, id);
 		}
 	}
 
