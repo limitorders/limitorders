@@ -28,8 +28,9 @@ abstract contract LimitOrdersLogicBase {
 	uint public pendingReward;
 
 	uint constant TICK_COUNT = 7900;
-	uint[(TICK_COUNT+255)/256] private sellOrderMaskWords;
-	uint[(TICK_COUNT+255)/256] private buyOrderMaskWords;
+	uint constant MASK_WORD_COUNT = (TICK_COUNT+255)/256;
+	uint[MASK_WORD_COUNT] private sellOrderMaskWords;
+	uint[MASK_WORD_COUNT] private buyOrderMaskWords;
 	uint[][TICK_COUNT] private sellOrderIdLists;
 	uint[][TICK_COUNT] private buyOrderIdLists;
 
@@ -70,13 +71,13 @@ abstract contract LimitOrdersLogicBase {
 	event DealWithSellOrders(address indexed taker, uint stockAmount, uint moneyAmount);
 	event DealWithBuyOrders(address indexed taker, uint stockAmount, uint moneyAmount);
 
-	function getSellOrderMaskWords() view external returns (uint[(TICK_COUNT+255)/256] memory masks) {
+	function getSellOrderMaskWords() view external returns (uint[MASK_WORD_COUNT] memory masks) {
 		for(uint i=0; i < masks.length; i++) {
 			masks[i] = sellOrderMaskWords[i];
 		}
 	}
 
-	function getBuyOrderMaskWords() view external returns (uint[(TICK_COUNT+255)/256] memory masks) {
+	function getBuyOrderMaskWords() view external returns (uint[MASK_WORD_COUNT] memory masks) {
 		for(uint i=0; i < masks.length; i++) {
 			masks[i] = buyOrderMaskWords[i];
 		}
