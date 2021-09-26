@@ -144,9 +144,9 @@ contract('LimitOrdersLogic', async (accounts) => {
         assert.equal(order.indexInBuyList, 0);
         assert.equal(order.stockAmount, 1e8);
         assert.equal(order.moneyAmount, 2e8);
-        assert.equal(await pair.userOrderIdLists(bob, 0), orderId);
-        assert.equal(await pair.sellOrderIdLists(order.priceTickHi, 0), orderId);
-        assert.equal(await pair.buyOrderIdLists(order.priceTickLo, 0), orderId);
+        assert.deepEqual(await getUserOrderIDs(pair, bob), [orderId]);
+        assert.deepEqual(await getSellOrderIDs(pair, order.priceTickHi), [orderId]);
+        assert.deepEqual(await getBuyOrderIDs(pair, order.priceTickLo), [orderId]);
         // console.log(mergePrice(order.priceBaseLo, order.priceTickLo));
         // console.log(mergePrice(order.priceBaseHi, order.priceTickHi));
         assert.equal(await wbtc.balanceOf(bob), 4e8);
@@ -192,18 +192,14 @@ contract('LimitOrdersLogic', async (accounts) => {
         await wbtc.transfer(bob, 6e8, { from: alice });
         await usdt.transfer(bob, 6e8, { from: alice });
 
-        const result0 = await pair.createGridOrder(pack({priceLo: 40000, priceHi: 50000, stock: 1e8, money: 1e8}), { from: bob });
-        const result1 = await pair.createGridOrder(pack({priceLo: 40000, priceHi: 50000, stock: 2e8, money: 2e8}), { from: bob });
-        const result2 = await pair.createGridOrder(pack({priceLo: 40000, priceHi: 50000, stock: 3e8, money: 3e8}), { from: bob });
-        assert.equal(await wbtc.balanceOf(bob), 0);
-        assert.equal(await usdt.balanceOf(bob), 0);
-
-        const orderID0 = getOrderID(bob, result0);
-        const orderID1 = getOrderID(bob, result1);
-        const orderID2 = getOrderID(bob, result2);
+        const orderID0 = await createGridOrder(pair, bob, {priceLo: 40000, priceHi: 50000, stock: 1e8, money: 1e8});
+        const orderID1 = await createGridOrder(pair, bob, {priceLo: 40000, priceHi: 50000, stock: 2e8, money: 2e8});
+        const orderID2 = await createGridOrder(pair, bob, {priceLo: 40000, priceHi: 50000, stock: 3e8, money: 3e8});
         assert.deepEqual(await getUserOrderIDs(pair, bob), [orderID0, orderID1, orderID2]);
         assert.deepEqual(await getSellOrderIDs(pair, 5397), [orderID0, orderID1, orderID2]);
         assert.deepEqual(await getBuyOrderIDs(pair, 5365), [orderID0, orderID1, orderID2]);
+        assert.equal(await wbtc.balanceOf(bob), 0);
+        assert.equal(await usdt.balanceOf(bob), 0);
 
         await pair.cancelGridOrder(1, { from: bob });
         assert.deepEqual(await getUserOrderIDs(pair, bob), [orderID0, orderID2]);
@@ -636,9 +632,9 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
         assert.equal(order.indexInBuyList, 0);
         assert.equal(order.stockAmount, 1e8);
         assert.equal(order.moneyAmount, 2e8);
-        assert.equal(await pair.userOrderIdLists(bob, 0), orderId);
-        assert.equal(await pair.sellOrderIdLists(order.priceTickHi, 0), orderId);
-        assert.equal(await pair.buyOrderIdLists(order.priceTickLo, 0), orderId);
+        assert.deepEqual(await getUserOrderIDs(pair, bob), [orderId]);
+        assert.deepEqual(await getSellOrderIDs(pair, order.priceTickHi), [orderId]);
+        assert.deepEqual(await getBuyOrderIDs(pair, order.priceTickLo), [orderId]);
         assert.equal(await usdt.balanceOf(bob), 3e8);
     });
 
@@ -775,41 +771,22 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
 });
 
 
+async function createGridOrder(pair, addr, args) {
+    const result = await pair.createGridOrder(pack(args), { from: addr });
+    return getOrderID(addr, result);
+}
+
 async function getUserOrderIDs(pair, addr) {
-    let ids = [];
-    for (let i = 0; ; i++) {
-        try {
-            let id = await pair.userOrderIdLists(addr, i);
-            ids.push(BigInt(id.toString()));
-        } catch(e) {
-            break;
-        }
-    }
-    return ids;
+    let orders = await pair.getUserOrders.call(addr, 0, 99);
+    return orders.map(x => BigInt(x[0].toString()));
 }
 async function getSellOrderIDs(pair, tick) {
-    let ids = [];
-    for (let i = 0; ; i++) {
-        try {
-            let id = await pair.sellOrderIdLists(tick, i);
-            ids.push(BigInt(id.toString()));
-        } catch(e) {
-            break;
-        }
-    }
-    return ids;
+    let orders = await pair.getSellOrders.call(tick, 0, 99);
+    return orders.map(x => BigInt(x[0].toString()));
 }
 async function getBuyOrderIDs(pair, tick) {
-    let ids = [];
-    for (let i = 0; ; i++) {
-        try {
-            let id = await pair.buyOrderIdLists(tick, i);
-            ids.push(BigInt(id.toString()));
-        } catch(e) {
-            break;
-        }
-    }
-    return ids;
+    let orders = await pair.getBuyOrders.call(tick, 0, 99);
+    return orders.map(x => BigInt(x[0].toString()));
 }
 
 function getOrderID(addr, result) {
