@@ -24,14 +24,14 @@ abstract contract LimitOrdersLogicBase {
 	address public money;
 	address public factory;
 
-	mapping(address => uint[]) public userOrderIdLists;
+	mapping(address => uint[]) private userOrderIdLists;
 	uint public pendingReward;
 
 	uint constant TICK_COUNT = 7900;
-	uint[(TICK_COUNT+255)/256] public sellOrderMaskWords;
-	uint[(TICK_COUNT+255)/256] public buyOrderMaskWords;
-	uint[][TICK_COUNT] public sellOrderIdLists;
-	uint[][TICK_COUNT] public buyOrderIdLists;
+	uint[(TICK_COUNT+255)/256] private sellOrderMaskWords;
+	uint[(TICK_COUNT+255)/256] private buyOrderMaskWords;
+	uint[][TICK_COUNT] private sellOrderIdLists;
+	uint[][TICK_COUNT] private buyOrderIdLists;
 
 	address constant SEP206Contract = address(bytes20(uint160(0x2711)));
 
@@ -69,6 +69,51 @@ abstract contract LimitOrdersLogicBase {
 	event CreateGridOrder(address indexed maker, uint packedOrder);
 	event DealWithSellOrders(address indexed taker, uint stockAmount, uint moneyAmount);
 	event DealWithBuyOrders(address indexed taker, uint stockAmount, uint moneyAmount);
+
+	function getSellOrderMaskWords() view external returns (uint[(TICK_COUNT+255)/256] memory masks) {
+		for(uint i=0; i < masks.length; i++) {
+			masks[i] = sellOrderMaskWords[i];
+		}
+	}
+
+	function getBuyOrderMaskWords() view external returns (uint[(TICK_COUNT+255)/256] memory masks) {
+		for(uint i=0; i < masks.length; i++) {
+			masks[i] = buyOrderMaskWords[i];
+		}
+	}
+
+	function orderToArray(GridOrder memory order, uint id) public pure returns (uint[5] memory arr) {
+		arr[0] = id;
+		arr[1] = uint(order.priceBaseLo)<<(uint(order.priceTickLo)/100);
+		arr[2] = uint(order.priceBaseHi)<<(uint(order.priceTickHi)/100);
+		arr[3] = order.stockAmount;
+		arr[4] = order.moneyAmount;
+	}
+
+	function getOrders(uint[] storage orderIdList, uint start, uint end) private returns(uint[5][] memory orders) {
+		if(end > orderIdList.length) {
+			end = orderIdList.length;
+		}
+		orders = new uint[5][](end-start);
+		for(uint i=start; i<end; i++) {
+			uint id = orderIdList[i];
+			GridOrder memory order = getGridOrder(id);
+			orders[i] = orderToArray(order, id);
+		}
+	}
+
+	function getUserOrders(address user, uint start, uint end) external returns(uint[5][] memory orders) {
+		return getOrders(userOrderIdLists[user], start, end);
+	}
+
+	function getSellOrders(uint tick, uint start, uint end) external returns(uint[5][] memory orders) {
+		return getOrders(sellOrderIdLists[tick], start, end);
+	}
+
+	function getBuyOrders(uint tick, uint start, uint end) external returns(uint[5][] memory orders) {
+		return getOrders(buyOrderIdLists[tick], start, end);
+	}
+
 
 	// return a number in the range [2.8147497671065605e-12, 2962330055567.072]
 	// maximum returned value: 17857168*31307392*(2**79)=fe3b4ed7d40000000000000000000000 < 2**128
