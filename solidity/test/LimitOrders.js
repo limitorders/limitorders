@@ -195,8 +195,8 @@ contract('LimitOrdersLogic', async (accounts) => {
         const o0 = await createGridOrder(pair, bob, {priceLo: 10000, priceHi: 20000, stock: 1e5, money: 1e5});
         const o1 = await createGridOrder(pair, bob, {priceLo: 20000, priceHi: 30000, stock: 2e5, money: 2e5});
         const o2 = await createGridOrder(pair, bob, {priceLo: 30000, priceHi: 40000, stock: 3e5, money: 3e5});
-        const o3 = await createGridOrder(pair, bob, {priceLo: 40000, priceHi: 50000, stock: 3e5, money: 3e5});
-        const o4 = await createGridOrder(pair, bob, {priceLo: 50000, priceHi: 60000, stock: 3e5, money: 3e5});
+        const o3 = await createGridOrder(pair, bob, {priceLo: 40000, priceHi: 50000, stock: 4e5, money: 4e5});
+        const o4 = await createGridOrder(pair, bob, {priceLo: 50000, priceHi: 60000, stock: 5e5, money: 5e5});
 
         assert.deepEqual(await getUserOrderIDs(pair, bob, 0, '0'), []);
         assert.deepEqual(await getUserOrderIDs(pair, bob, 0, 1), [o0]);
@@ -206,6 +206,25 @@ contract('LimitOrdersLogic', async (accounts) => {
         assert.deepEqual(await getUserOrderIDs(pair, bob, 1, 4), [o1, o2, o3]);
         assert.deepEqual(await getUserOrderIDs(pair, bob, 2, 5), [o2, o3, o4]);
         assert.deepEqual(await getUserOrderIDs(pair, bob, 3, 6), [o3, o4]);
+    });
+
+
+    it('getSellBuyOrders', async () => {
+        await wbtc.transfer(bob, 6e8, { from: alice });
+        await usdt.transfer(bob, 6e8, { from: alice });
+
+        const o0 = await createGridOrder(pair, bob,   {priceLo: 40000, priceHi: 50000, stock: 1e5, money: 1e5});
+        const o1 = await createGridOrder(pair, bob,   {priceLo: 40000, priceHi: 50000, stock: 2e5, money: 2e5});
+        const o2 = await createGridOrder(pair, bob,   {priceLo: 40000, priceHi: 50000, stock: 3e5, money: 3e5});
+        const o3 = await createGridOrder(pair, alice, {priceLo: 40000, priceHi: 50000, stock: 4e5, money: 4e5});
+        const o4 = await createGridOrder(pair, alice, {priceLo: 40000, priceHi: 50000, stock: 5e5, money: 5e5});
+        const o5 = await createGridOrder(pair, alice, {priceLo: 40000, priceHi: 50000, stock: 6e5, money: 6e5});
+
+        assert.deepEqual(await getSellOrderIDs(pair, 5397, 0, '0'), []);
+        assert.deepEqual(await getSellOrderIDs(pair, 5397, 0, 3), [o0, o1, o2]);
+        assert.deepEqual(await getSellOrderIDs(pair, 5397, 1, 4), [o1, o2, o3]);
+        assert.deepEqual(await getBuyOrderIDs (pair, 5365, 2, 5), [o2, o3, o4]);
+        assert.deepEqual(await getBuyOrderIDs (pair, 5365, 3, 6), [o3, o4, o5]);
     });
 
     it('cancelGridOrder', async () => {
