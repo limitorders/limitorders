@@ -68,8 +68,8 @@ abstract contract LimitOrdersLogicBase {
 	uint constant PriceDecimals = 26;
 
 	event CreateGridOrder(address indexed maker, uint packedOrder);
-	event DealWithSellOrders(address indexed taker, uint stockAmount, uint moneyAmount);
-	event DealWithBuyOrders(address indexed taker, uint stockAmount, uint moneyAmount);
+	event DealWithSellOrders(address indexed taker, uint stock_money_time);
+	event DealWithBuyOrders(address indexed taker, uint stock_money_time);
 
 	function getSellOrderMaskWords() view external returns (uint[MASK_WORD_COUNT] memory masks) {
 		for(uint i=0; i < masks.length; i++) {
@@ -274,7 +274,8 @@ abstract contract LimitOrdersLogicBase {
 		safeTransfer(stock, msg.sender, gotStock);
 		safeTransfer(money, msg.sender, moneyAmount + fee0 - fee);
 		pendingReward += fee;
-		emit DealWithSellOrders(msg.sender, gotStock, dealMoney);
+		uint stock_money_time = (gotStock<<(96+64)) | (dealMoney<<64) | block.timestamp;
+		emit DealWithSellOrders(msg.sender, stock_money_time);
 	}
 
 	function dealWithSellOrder(uint maxPrice, uint orderPos, uint maxGotStock,
@@ -337,7 +338,9 @@ abstract contract LimitOrdersLogicBase {
 		pendingReward += fee;
 		safeTransfer(money, msg.sender, gotMoney - fee);
 		safeTransfer(stock, msg.sender, stockAmount);
-		emit DealWithBuyOrders(msg.sender, stockAmount0 - stockAmount, gotMoney);
+		uint dealStock = stockAmount0 - stockAmount;
+		uint stock_money_time = (dealStock<<(96+64)) | (gotMoney<<64) | block.timestamp;
+		emit DealWithBuyOrders(msg.sender, stock_money_time);
 	}
 
 	function dealWithBuyOrder(uint minPrice, uint orderPos, uint maxGotMoney, 
