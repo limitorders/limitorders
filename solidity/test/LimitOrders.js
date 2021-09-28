@@ -208,7 +208,6 @@ contract('LimitOrdersLogic', async (accounts) => {
         assert.deepEqual(await getUserOrderIDs(pair, bob, 3, 6), [o3, o4]);
     });
 
-
     it('getSellBuyOrders', async () => {
         await wbtc.transfer(bob, 6e8, { from: alice });
         await usdt.transfer(bob, 6e8, { from: alice });
@@ -272,7 +271,7 @@ contract('LimitOrdersLogic', async (accounts) => {
         await truffleAssert.reverts(pair.cancelGridOrder(2, {from: alice}), msg);
     });
 
-    it('dealWithSellOrders', async () => {
+    it('dealWithSellOrdersxx', async () => {
         const result1 = await pair.createGridOrder(pack({
             priceLo: 12345.67,
             priceHi: 67890.12,
@@ -292,9 +291,12 @@ contract('LimitOrdersLogic', async (accounts) => {
         assert.equal(await wbtc.balanceOf(bob), 1470);
 
         // console.log(result2.logs[0].args);
-        const BN = web3.utils.toBN;
-        truffleAssert.eventEmitted(result2, 'DealWithSellOrders', 
-            { taker: bob, stockAmount: BN(1470), moneyAmount: BN(99800000) });
+        assert.deepEqual(getDealWithSellOrdersEvent(result2), {
+            taker: bob,
+            stock: 1470n,
+            money: 99800000n,
+            ts   : await getBlockTS(result2),
+        });
     });
 
     it('dealWithBuyOrders', async () => {
@@ -317,9 +319,12 @@ contract('LimitOrdersLogic', async (accounts) => {
         assert.equal(await usdt.balanceOf(bob), 12320958);
  
         // console.log(result2.logs[0].args);
-        const BN = web3.utils.toBN;
-        truffleAssert.eventEmitted(result2, 'DealWithBuyOrders', 
-            { taker: bob, stockAmount: BN(1000), moneyAmount: BN(12345649) });
+        assert.deepEqual(getDealWithBuyOrdersEvent(result2), {
+            taker: bob,
+            stock: 1000n,
+            money: 12345649n,
+            ts   : await getBlockTS(result2),
+        });
     });
 
     it('dealWithSellOrders_buyAll', async () => {
@@ -834,6 +839,12 @@ async function getBuyOrderIDs(pair, tick, start, end) {
     return orders.map(x => BigInt(x[0].toString()));
 }
 
+async function getBlockTS(result) {
+    const bn = result.receipt.blockNumber;
+    const block = await web3.eth.getBlock(bn);
+    return BigInt(block.timestamp);
+}
+
 function getOrderID(addr, result) {
     const blockNum = result.receipt.blockNumber;
     return BigInt(addr) << 96n | BigInt(blockNum) << 32n;
@@ -885,5 +896,25 @@ function getGridOrderCreatedEvent(result) {
     return {
         maker      : log.args.maker,
         packedOrder: log.args.packedOrder,
+    };
+}
+
+function getDealWithSellOrdersEvent(result) {
+    return getDealWithOrdersEvent(result, 'DealWithSellOrders')
+}
+function getDealWithBuyOrdersEvent(result) {
+    return getDealWithOrdersEvent(result, 'DealWithBuyOrders')
+}
+function getDealWithOrdersEvent(result, eventType) {
+    const log = result.logs.find(log => log.event == eventType);
+    assert.isNotNull(log);
+    // DealWithSellOrders: (gotStock<<(96+64)) | (dealMoney<<64) | block.timestamp
+    // DealWithBuyOrders: (dealStock<<(96+64)) | (gotMoney<<64) | block.timestamp;
+    const data = BigInt(log.args.stock_money_time.toString());
+    return {
+        taker: log.args.taker,
+        ts   :  data          & ((1n << 64n) - 1n),
+        money: (data >>  64n) & ((1n << 96n) - 1n),
+        stock: (data >> 160n) & ((1n << 96n) - 1n),
     };
 }
