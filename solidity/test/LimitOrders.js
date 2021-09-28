@@ -271,7 +271,7 @@ contract('LimitOrdersLogic', async (accounts) => {
         await truffleAssert.reverts(pair.cancelGridOrder(2, {from: alice}), msg);
     });
 
-    it('dealWithSellOrdersxx', async () => {
+    it('dealWithSellOrders', async () => {
         const result1 = await pair.createGridOrder(pack({
             priceLo: 12345.67,
             priceHi: 67890.12,
