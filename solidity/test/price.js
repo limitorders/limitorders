@@ -111,7 +111,11 @@ function test() {
   testPrice(22600775.023599107)
   testPrice(1587473070415)
   testPrice(25961484.84836226)
-	
+  testPrice(17e11)
+  testPrice(171e10)
+  testPrice(172e10)
+  testPrice(1e-11)
+  // testPrice(1e-12)
 }
 
 // test()

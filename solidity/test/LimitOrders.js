@@ -13,6 +13,7 @@ const LimitOrdersFactory = artifacts.require("LimitOrdersFactory");
 const FakeToken = artifacts.require("FakeToken");
 const IERC20 = artifacts.require("IERC20");
 
+const _1e8 = 10n ** 8n;
 const _1e18 = 10n ** 18n;
 const priceDec = 10n ** 26n;
 
@@ -151,6 +152,88 @@ contract('LimitOrdersLogic', async (accounts) => {
         // console.log(mergePrice(order.priceBaseHi, order.priceTickHi));
         assert.equal(await wbtc.balanceOf(bob), 4e8);
         assert.equal(await usdt.balanceOf(bob), 3e8);
+    });
+
+    it('createGridOrder_bigPrice', async () => {
+        let result = await pair.createGridOrder(pack({
+            priceLo: 4e8,
+            priceHi: 6e8,
+            stock  : 0,
+            money  : 123,
+        }), { from: alice });
+        let orderId = getOrderID(alice, result);
+        let order = await pair.getGridOrder.call(orderId);
+        assert.equal(order.priceTickLo, 6694);
+        assert.equal(order.priceTickHi, 6753);
+
+        result = await pair.createGridOrder(pack({
+            priceLo: 4e10,
+            priceHi: 6e10,
+            stock  : 0,
+            money  : 123,
+        }), { from: alice });
+        orderId = getOrderID(alice, result);
+        order = await pair.getGridOrder.call(orderId);
+        assert.equal(order.priceTickLo, 7358);
+        assert.equal(order.priceTickHi, 7417);
+
+        result = await pair.createGridOrder(pack({
+            priceLo: 165e10,
+            priceHi: 170e10,
+            stock  : 0,
+            money  : 123,
+        }), { from: alice });
+        orderId = getOrderID(alice, result);
+        order = await pair.getGridOrder.call(orderId);
+        assert.equal(order.priceTickLo, 7895);
+        assert.equal(order.priceTickHi, 7899);
+    });
+
+    it('createGridOrder_smallPrice', async () => {
+        // wbtc: 18, usdt: 8
+        let result = await pair.createGridOrder(pack({
+            priceLo: 0.000004,
+            priceHi: 0.000006,
+            stock  : 0,
+            money  : 123,
+        }), { from: alice });
+        let orderId = getOrderID(alice, result);
+        let order = await pair.getGridOrder.call(orderId);
+        assert.equal(order.priceTickLo, 2043);
+        assert.equal(order.priceTickHi, 2102);
+
+        result = await pair.createGridOrder(pack({
+            priceLo: 0.0000041,
+            priceHi: 0.0000042,
+            stock  : 0,
+            money  : 123,
+        }), { from: alice });
+        orderId = getOrderID(alice, result);
+        order = await pair.getGridOrder.call(orderId);
+        assert.equal(order.priceTickLo, 2047);
+        assert.equal(order.priceTickHi, 2050);
+
+        result = await pair.createGridOrder(pack({
+            priceLo: 0.000000305,
+            priceHi: 0.000000310,
+            stock  : 0,
+            money  : 123,
+        }), { from: alice });
+        orderId = getOrderID(alice, result);
+        order = await pair.getGridOrder.call(orderId);
+        assert.equal(order.priceTickLo, 1672);
+        assert.equal(order.priceTickHi, 1674);
+
+        result = await pair.createGridOrder(pack({
+            priceLo: 0.0000000405,
+            priceHi: 0.0000000410,
+            stock  : 0,
+            money  : 123,
+        }), { from: alice });
+        orderId = getOrderID(alice, result);
+        order = await pair.getGridOrder.call(orderId);
+        assert.equal(order.priceTickLo, 1381);
+        assert.equal(order.priceTickHi, 1383);
     });
 
     it('createGridOrder_invalidPrice', async () => {
