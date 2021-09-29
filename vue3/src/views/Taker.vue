@@ -35,12 +35,178 @@
       </p>
     </div>
     <hr/>
+    <p style="text-align: center;"><button @click="showDepth" style="font-size: 22px">
+    Show Depth Graphs</button></p>
+    <div id="sell_depth"></div>
+    <div id="buy_depth"></div>
   </div>
 </template>
 
 <script>
 function alertNoMemos() {
   alert("You have not written any memo yet")
+}
+
+function getSellOrdersToDealWith(sellOrders, buyAmount, maxPrice) {
+  var indexAndTickList = []
+  var estimatedAmount = 0.0
+  buyAmount = buyAmount*1.5 //Add some margin
+  for(var i=0; i<sellOrders.length; i++) {
+    if(sellOrders[i].highPrice > maxPrice || estimatedAmount > buyAmount) {
+      break
+    }
+    if(sellOrders[i].stockAmount == 0) {
+      continue
+    }
+    console.log("sellOrder", sellOrders[i])
+    console.log("estimatedAmount", estimatedAmount, "buyAmount", buyAmount)
+    indexAndTickList.push(sellOrders[i].indexAndTick)
+    estimatedAmount += sellOrders[i].stockAmount
+  }
+  return [indexAndTickList, estimatedAmount]
+}
+
+function getBuyOrdersToDealWith(buyOrders, sellAmount, minPrice) {
+  var indexAndTickList = []
+  var estimatedAmount = 0.0
+  sellAmount = sellAmount*1.5 //Add some margin
+  for(var i=0; i<buyOrders.length; i++) {
+    console.log("HERE",buyOrders[i].lowPrice, minPrice, estimatedAmount, sellAmount)
+    if(buyOrders[i].lowPrice < minPrice || estimatedAmount > sellAmount) {
+      break
+    }
+    if(buyOrders[i].moneyAmount == 0) {
+      continue
+    }
+    console.log("buyOrder", buyOrders[i])
+    indexAndTickList.push(buyOrders[i].indexAndTick)
+    estimatedAmount += (buyOrders[i].moneyAmount/buyOrders[i].lowPrice)
+  }
+  return [indexAndTickList, estimatedAmount]
+}
+
+function packOrderPosList(indexAndTickList) {
+  var orderPosList = []
+  var m = 0n
+  var count = 0
+  for(var i=0; i<indexAndTickList.length; i++) {
+    m = (m<<48n) | BigInt(indexAndTickList[i])
+    count++
+    if(count==5) {
+      count = 0
+      m = 0n
+      orderPosList.push(ethers.BigNumber.from(m))
+    }
+  }
+  if(m != 0n) {
+    orderPosList.push(ethers.BigNumber.from(m))
+  }
+  console.log("packOrderPosList", indexAndTickList, orderPosList)
+  return orderPosList
+}
+
+function drawDepthGraph(rows, id, yTitle) {
+      var data = new google.visualization.DataTable();
+      data.addColumn('number', 'Price');
+      data.addColumn('number', yTitle);
+
+      console.log("drawDepthGraph", rows)
+      data.addRows(rows)
+
+      var options = {
+        hAxis: {
+          title: 'Price'
+        },
+        vAxis: {
+          title: yTitle
+        },
+        series: {
+          1: {curveType: 'none'}
+        }
+      };
+
+      var chart = new google.visualization.LineChart(document.getElementById(id));
+      chart.draw(data, options);
+}
+
+async function updateDepth(marketAddress) {
+  const provider = new ethers.providers.Web3Provider(window.ethereum)
+  const marketContract = new ethers.Contract(marketAddress, ABI, provider)
+
+  const maxOrderCount = 3000
+  const sellMasks = await marketContract.getSellOrderMaskWords()
+  var sellOrders = []
+  for(var n=0; n<sellMasks.length; n++) {
+    const mask = sellMasks[n].toBigInt()
+    for(var j=0; j<256; j++) {
+      if(((mask>>BigInt(j))&1n) != 0) {
+        const tick = n*256+j
+	const orderArrays = await marketContract.getSellOrders(tick, 0, 365)
+        //console.log("orderArrays", orderArrays)
+	var orders = []
+	for(var i=0; i<orderArrays.length; i++) {
+	  orders.push(orderArrayToObj(orderArrays[i], i*65536+tick))
+	}
+	orders.sort(function(a, b) {return a.highPrice - b.highPrice})
+	for(var i=0; i<orders.length; i++) {
+	  sellOrders.push(orders[i])
+	}
+      }
+      if(sellOrders.length > maxOrderCount) {
+        break
+      }
+    }
+  }
+  var totalSell = 0.0
+  var sellDepth = []
+  for(var i=0; i<sellOrders.length; i++) {
+    totalSell += sellOrders[i].stockAmount
+    sellDepth.push([sellOrders[i].highPrice, totalSell])
+  }
+  if(sellDepth.length > 0) {
+    sellDepth.unshift([sellDepth[0][0] * 0.99, 0])
+  }
+  console.log("sellDepth", sellDepth)
+
+  const buyMasks = await marketContract.getBuyOrderMaskWords()
+  var buyOrders = []
+  for(var n=buyMasks.length-1; n>0; n--) {
+    const mask = buyMasks[n].toBigInt()
+    for(var j=255; j>0; j--) {
+      if(((mask>>BigInt(j))&1n) != 0) {
+        const tick = n*256+j
+        console.log("tick", tick)
+	const orderArrays = await marketContract.getBuyOrders(tick, 0, 365)
+        //console.log("orderArrays", orderArrays)
+	var orders = []
+	for(var i=0; i<orderArrays.length; i++) {
+	  orders.push(orderArrayToObj(orderArrays[i], i*65536+tick))
+	}
+	orders.sort(function(a, b) {return b.highPrice - a.highPrice})
+	for(var i=0; i<orders.length; i++) {
+	  buyOrders.push(orders[i])
+	}
+      }
+      if(buyOrders.length > maxOrderCount) {
+        break
+      }
+    }
+  }
+  var totalBuy = 0.0
+  var buyDepth = []
+  for(var i=0; i<buyOrders.length; i++) {
+    totalBuy += buyOrders[i].stockAmount
+    buyDepth.unshift([buyOrders[i].lowPrice, totalBuy])
+  }
+  if(buyDepth.length > 0) {
+    buyDepth.push([buyDepth[buyDepth.length-1][0] * 1.01, 0])
+  }
+
+  console.log("sellDepth2", sellDepth)
+  drawDepthGraph(sellDepth, "sell_depth", "Sell Amount")
+  drawDepthGraph(buyDepth, "buy_depth", "Buy Amount")
+
+  return [sellOrders, buyOrders]
 }
 
 export default {
@@ -52,15 +218,92 @@ export default {
       sellPrice: 0,
       stockSymbol: "",
       moneySymbol: "",
+      moneyDecimals: 0,
+      stockDecimals: 0,
       stockAmount: 0,
       moneyAmount: 0,
+      stockAddr: "",
+      moneyAddr: "",
       stockURL: "",
       moneyURL: "",
+      marketAddress: "",
+      sellOrders: [],
+      buyOrders: [],
       picked: 'Buy',
+      depthShown: false,
       hasCurrentMarket: false
     }
   },
   methods: {
+     async showDepth() {
+      [this.sellOrders, this.buyOrders] = await updateDepth(this.marketAddress)
+      this.depthShown = true
+     },
+     async buy() {
+       if(!this.depthShown) {
+         [this.sellOrders, this.buyOrders] = await updateDepth(this.marketAddress)
+       }
+       var [indexAndTickList, estimatedAmount] = getSellOrdersToDealWith(this.sellOrders, this.buyAmount, this.buyPrice)
+       if(indexAndTickList.length == 0) {
+         alert("Find no sell order to deal with!")
+	 return
+       }
+       //var gasPrice = await provider.getStorageAt("0x0000000000000000000000000000000000002710","0x00000000000000000000000000000000000000000000000000000000000000002")
+       //if(gasPrice == "0x") {
+       //  gasPrice = "0x0"
+       //}
+       var moneyNeeded = this.buyAmount*this.buyPrice
+       const moneyAmountIn = await safeGetAmount(this.moneyAddr, this.moneySymbol, moneyNeeded,
+       				this.moneyDecimals, this.marketAddress, 0)
+       if(!moneyAmountIn) {
+         return
+       }
+       var maxPrice = ethers.utils.parseUnits(this.buyPrice.toString(), 26)
+       var orderPosList = packOrderPosList(indexAndTickList)
+       var twoPow96 = ethers.BigNumber.from(2).pow(96)
+       var maxGotStock = ethers.utils.parseUnits(this.buyAmount.toString(), this.stockDecimals)
+       console.log("moneyAmountIn", moneyAmountIn.toHexString())
+       console.log("maxGotStock", maxGotStock.toHexString())
+       var moneyAmountIn_maxGotStock = moneyAmountIn.mul(twoPow96).add(maxGotStock)
+
+       const provider = new ethers.providers.Web3Provider(window.ethereum)
+       const signer = provider.getSigner()
+       const marketContract = new ethers.Contract(this.marketAddress, ABI, provider).connect(signer)
+       var txResp = await marketContract.dealWithSellOrders(maxPrice, orderPosList, moneyAmountIn_maxGotStock)
+       const receipt = await txResp.wait(1)
+       console.log("receipt.logs", receipt.logs)
+     },
+     async sell() {
+       if(!this.depthShown) {
+         [this.sellOrders, this.buyOrders] = await updateDepth(this.marketAddress)
+       }
+       var [indexAndTickList, estimatedAmount] = getBuyOrdersToDealWith(this.buyOrders, this.sellAmount, this.sellPrice)
+       if(indexAndTickList.length == 0) {
+         alert("Find no buy order to deal with!")
+	 return
+       }
+       //var gasPrice = await provider.getStorageAt("0x0000000000000000000000000000000000002710","0x00000000000000000000000000000000000000000000000000000000000000002")
+       //if(gasPrice == "0x") {
+       //  gasPrice = "0x0"
+       //}
+       const stockAmountIn = await safeGetAmount(this.stockAddr, this.stockSymbol, this.sellAmount,
+       				this.stockDecimals, this.marketAddress, 0)
+       if(!stockAmountIn) {
+         return
+       }
+       var minPrice = ethers.utils.parseUnits(this.sellPrice.toString(), 26)
+       var orderPosList = packOrderPosList(indexAndTickList)
+       var twoPow96 = ethers.BigNumber.from(2).pow(96)
+       var twoPow96Minus1 = twoPow96.sub(ethers.BigNumber.from(1))
+       var stockAmountIn_maxGotMoney = stockAmountIn.mul(twoPow96).add(twoPow96Minus1)
+
+       const provider = new ethers.providers.Web3Provider(window.ethereum)
+       const signer = provider.getSigner()
+       const marketContract = new ethers.Contract(this.marketAddress, ABI, provider).connect(signer)
+       var txResp = await marketContract.dealWithBuyOrders(minPrice, orderPosList, stockAmountIn_maxGotMoney)
+       const receipt = await txResp.wait(1)
+       console.log("receipt.logs", receipt.logs)
+     },
      toBuy() {
        this.picked="Buy"
      },
@@ -83,25 +326,26 @@ export default {
       const marketArr = currMarket.split(",")
       this.stockSymbol = marketArr[0]
       this.moneySymbol = marketArr[1]
-      const stockAddr = marketArr[2]
-      const moneyAddr = marketArr[3]
-      this.stockURL = "https://www.smartscan.cash/address/"+stockAddr
-      this.moneyURL = "https://www.smartscan.cash/address/"+moneyAddr
+      this.stockAddr = marketArr[2]
+      this.moneyAddr = marketArr[3]
+      this.stockURL = "https://www.smartscan.cash/address/"+this.stockAddr
+      this.moneyURL = "https://www.smartscan.cash/address/"+this.moneyAddr
+      this.marketAddress = getMarketAddress(this.stockAddr, this.moneyAddr)
 
-      const stockContract = new ethers.Contract(stockAddr, SEP20ABI, provider)
-      const moneyContract = new ethers.Contract(moneyAddr, SEP20ABI, provider)
+      const stockContract = new ethers.Contract(this.stockAddr, SEP20ABI, provider)
+      const moneyContract = new ethers.Contract(this.moneyAddr, SEP20ABI, provider)
       try {
 	var balanceAmt = await stockContract.balanceOf(this.myAddress)
-        var decimals = await stockContract.decimals()
-        this.stockAmount = ethers.utils.formatUnits(balanceAmt, decimals)
+        this.stockDecimals = await stockContract.decimals()
+        this.stockAmount = ethers.utils.formatUnits(balanceAmt, this.stockDecimals)
 	balanceAmt = await moneyContract.balanceOf(this.myAddress)
-        decimals = await moneyContract.decimals()
-        this.moneyAmount = ethers.utils.formatUnits(balanceAmt, decimals)
+        this.moneyDecimals = await moneyContract.decimals()
+        this.moneyAmount = ethers.utils.formatUnits(balanceAmt, this.moneyDecimals)
       } catch(e) {
         console.log(e)
       }
     } else {
-      alert("You have set current market! Please enter a market first before exchanging coins.")
+      alertNoCurrentMarket()
     }
   }
 }

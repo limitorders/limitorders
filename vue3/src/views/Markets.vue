@@ -2,12 +2,14 @@
   <div class="normal">
     <h3 v-if="hasCurrentMarket">Current Market: <code><a v-bind:href="stockURL">{{stockSymbol}}</a>/<a v-bind:href="moneyURL">{{moneySymbol}}</a></code></h3>
     <h3 v-else>Current Market: [Not Set]</h3>
-    If you want to enter a market, please specify its stock and money:<br/>
+    If you want to enter a market, please specify its stock and money (0x0000000000000000000000000000000000002711 for BCH):<br/>
     <code>Stock:&nbsp;</code><input v-model="stockToken" type="text" placeholder="Please enter an address in HEX format"><br/>
     <code>Money:&nbsp;</code><input v-model="moneyToken" type="text" placeholder="Please enter an address in HEX format">
     &nbsp;<button @click="enterMarket" style="font-size: 20px;">Enter</button><br/>
     <hr/>
+    <!--
     <button @click="unsetCurr" style="font-size:20px; width: 280px;">unset current market</button><br/>
+    -->
     <p v-if="hasHistory">Here are some markets you have entered before:</p>
     <table>
     <template v-for="(entry, idx) in markets" :keys="entry.fullInfo">
