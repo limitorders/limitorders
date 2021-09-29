@@ -707,6 +707,148 @@ contract('LimitOrdersLogic', async (accounts) => {
 
 });
 
+contract('LimitOrdersLogic_differentDecimals', async (accounts) => {
+
+    const alice = accounts[0];
+    const bob   = accounts[1];
+    const fiddy = accounts[2];
+
+    let logic;
+    let factory;
+    let wbtc;
+    let usdt;
+    let pair;
+
+    before(async () => {
+        logic = await LimitOrdersLogic.new();
+        factory = await LimitOrdersFactory.new(fiddy);
+    });
+
+    beforeEach(async () => {
+        const totalSupply = 10000000n * _1e18;
+        wbtc = await FakeToken.new("WBTC", totalSupply, 18);
+        usdt = await FakeToken.new("USDT", totalSupply, 8);
+        const result = await factory.create(wbtc.address, usdt.address, logic.address);
+        const event = getPairCreatedEvent(result);
+        const pairAddr = event.pairAddr;
+        pair = await LimitOrdersLogic.at(pairAddr);
+        await wbtc.approve(pair.address, totalSupply, { from: alice });
+        await usdt.approve(pair.address, totalSupply, { from: alice });
+        await wbtc.approve(pair.address, totalSupply, { from: bob });
+        await usdt.approve(pair.address, totalSupply, { from: bob });
+    });
+
+    it('createGridOrder_differentDecimals', async () => {
+        await wbtc.transfer(bob, 5e8, { from: alice });
+        await usdt.transfer(bob, 5e8, { from: alice });
+
+        const result = await pair.createGridOrder(pack({
+            priceLo: 12345.67,
+            priceHi: 67890.12,
+            stock  : 1e8,
+            money  : 2e8,
+        }), { from: bob });
+        const orderId = getOrderID(bob, result);
+        const order = await pair.getGridOrder.call(orderId);
+        // console.log(order);
+        assert.equal(order.priceBaseLo, 548256975020389);
+        assert.equal(order.priceBaseHi, 376865667786415);
+        assert.equal(order.priceTickLo, 5196);
+        assert.equal(order.priceTickHi, 5442);
+        assert.equal(order.indexInSellList, 0);
+        assert.equal(order.indexInBuyList, 0);
+        assert.equal(order.stockAmount, 1e8);
+        assert.equal(order.moneyAmount, 2e8);
+        assert.deepEqual(await getUserOrderIDs(pair, bob), [orderId]);
+        assert.deepEqual(await getSellOrderIDs(pair, order.priceTickHi), [orderId]);
+        assert.deepEqual(await getBuyOrderIDs(pair, order.priceTickLo), [orderId]);
+        // console.log(mergePrice(order.priceBaseLo, order.priceTickLo));
+        // console.log(mergePrice(order.priceBaseHi, order.priceTickHi));
+        assert.equal(await wbtc.balanceOf(bob), 4e8);
+        assert.equal(await usdt.balanceOf(bob), 3e8);
+    });
+
+    it('dealWithSellOrders_buyAll_differentDecimals', async () => {
+        const result1 = await pair.createGridOrder(pack({
+            priceLo: 400.00,
+            priceHi: 500.00,
+            stock  : 2n * _1e18,
+            money  : 0,
+        }), { from: alice });
+        await pair.createGridOrder(pack({
+            priceLo: 400.00,
+            priceHi: 502.00,
+            stock  : 2n * _1e18,
+            money  : 0,
+        }), { from: alice });
+        const orderId = getOrderID(alice, result1);
+        let order = await pair.getGridOrder.call(orderId);
+        // console.log(order);
+        assert.equal(order.priceTickLo, 4701);
+        assert.equal(order.priceTickHi, 4733);
+        assert.equal(order.indexInSellList, 0);
+        assert.equal(order.indexInBuyList, 0);
+
+        const moneyIn = 1002n * _1e8;
+        await usdt.transfer(bob, moneyIn, { from: alice });
+        const result2 = await pair.dealWithSellOrders(
+            501n * priceDec,         // maxPrice,
+            [4733n, 4734n],          // orderPosList
+            BigInt(moneyIn) << 96n | // moneyAmountIn
+            BigInt(3n * _1e18),      // maxGotStock
+            { from: bob },
+        );
+
+        order = await pair.getGridOrder.call(orderId);
+        assert.equal(order.stockAmount, 0);
+        assert.equal(order.moneyAmount, 99998319965);
+
+        assert.equal(await wbtc.balanceOf(bob), 2n * _1e18);
+        assert.equal(await usdt.balanceOf(bob), 1282601);
+        assert.equal(await pair.pendingReward(), 200397434);
+    });
+
+    it('dealWithBuyOrders_sellAll_differentDecimals', async () => {
+        const result1 = await pair.createGridOrder(pack({
+            priceLo: 400.00,
+            priceHi: 500.00,
+            stock  : 0,
+            money  : 800n * _1e8,
+        }), { from: alice });
+        await pair.createGridOrder(pack({
+            priceLo: 398.00,
+            priceHi: 500.00,
+            stock  : 0,
+            money  : 800n * _1e8,
+        }), { from: alice });
+        const orderId = getOrderID(alice, result1);
+        let order = await pair.getGridOrder.call(orderId);
+        // console.log(order);
+        assert.equal(order.priceTickLo, 4701);
+        assert.equal(order.priceTickHi, 4733);
+        assert.equal(order.indexInSellList, 0);
+        assert.equal(order.indexInBuyList, 0);
+
+        const stockIn = 2n * _1e18;
+        await wbtc.transfer(bob, 2n * _1e18, { from: alice });
+        const result2 = await pair.dealWithBuyOrders(
+            399n * priceDec, // minPrice,
+            [4700n, 4701n],  // orderPosList
+            stockIn << 96n | // stockAmountIn
+            900n * _1e8,     // maxGotMoney
+            { from: bob },
+        );
+
+        order = await pair.getGridOrder.call(orderId);
+        assert.equal(order.stockAmount, stockIn);
+        assert.equal(order.moneyAmount, 613408);
+
+        assert.equal(await wbtc.balanceOf(bob), 0);
+        assert.equal(await usdt.balanceOf(bob), 79839387819);
+        assert.equal(await pair.pendingReward(), 159998773);
+    });
+
+});
 
 contract('LimitOrdersLogic_SEP206', async (accounts) => {
 

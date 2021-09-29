@@ -309,7 +309,8 @@ abstract contract LimitOrdersLogicBase {
 		}
 		GridOrder memory gridOrder = getGridOrder(orderId);
 		uint price = uint(gridOrder.priceBaseHi)<<(uint(gridOrder.priceTickHi)/100);
-		if(price*priceMul > maxPrice*priceDiv) {
+		// if(price*priceMul > maxPrice*priceDiv) {
+		if(price > maxPrice) {
 			return (remainedMoney, gotStock);
 		}
 		uint moneyAmountOfMaker = price*priceMul*uint(gridOrder.stockAmount)/((10**PriceDecimals)*priceDiv);
@@ -379,7 +380,8 @@ abstract contract LimitOrdersLogicBase {
 		}
 		GridOrder memory gridOrder = getGridOrder(orderId);
 		uint price = uint(gridOrder.priceBaseLo)<<(uint(gridOrder.priceTickLo)/100);
-		if(price*priceMul < minPrice*priceDiv) {
+		// if(price*priceMul < minPrice*priceDiv) {
+		if(price < minPrice) {
 			return (remainedStock, gotMoney);
 		}
 		uint stockAmountOfMaker = uint(gridOrder.moneyAmount)*(10**PriceDecimals)*priceDiv/(price*priceMul);
