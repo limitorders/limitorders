@@ -22,7 +22,7 @@ interface IFeeTo {
 abstract contract LimitOrdersLogicBase {
 	address public stock;
 	address public money;
-	address public factory;
+	uint public priceAdjust_factory;
 
 	mapping(address => uint[]) private userOrderIdLists;
 	uint public pendingReward;
@@ -70,6 +70,11 @@ abstract contract LimitOrdersLogicBase {
 	event CreateGridOrder(address indexed maker, uint packedOrder);
 	event DealWithSellOrders(address indexed taker, uint stock_money_time);
 	event DealWithBuyOrders(address indexed taker, uint stock_money_time);
+
+	function initPriceAdjust(uint priceAdjust) external {
+		require((priceAdjust_factory >> 160) == 0, "already-adjusted");
+		priceAdjust_factory |= priceAdjust;
+	}
 
 	function getSellOrderMaskWords() view external returns (uint[MASK_WORD_COUNT] memory masks) {
 		for(uint i=0; i < masks.length; i++) {
@@ -247,15 +252,27 @@ abstract contract LimitOrdersLogicBase {
 		safeTransfer(money, msg.sender, uint(order.moneyAmount));
 	}
 
+	function loadPriceMulDiv() internal view returns (uint priceMul, uint priceDiv) {
+		uint priceAdjust = priceAdjust_factory >> 160;
+		bool isDiv = (priceAdjust & 1) != 0;
+		priceAdjust >>= 1;
+		if(isDiv) {
+			(priceMul, priceDiv) = (1, priceAdjust);
+		} else {
+			(priceMul, priceDiv) = (priceAdjust, 1);
+		}
+	}
+
 	function dealWithSellOrders(uint maxPrice, uint[] calldata orderPosList,
 				    uint moneyAmountIn_maxGotStock) external payable {
-		uint moneyAmountIn = moneyAmountIn_maxGotStock>>96;
+		uint totalMoneyAmount = moneyAmountIn_maxGotStock>>96;
 		uint maxGotStock = uint96(moneyAmountIn_maxGotStock);
-		uint totalMoneyAmount = safeReceive(money, msg.sender, moneyAmountIn, true);
+		totalMoneyAmount = safeReceive(money, msg.sender, totalMoneyAmount, true);
 		uint fee0 = totalMoneyAmount * 2 / 1000; // 0.2% fee
 		uint moneyAmount0 = totalMoneyAmount - fee0;
 		uint moneyAmount = moneyAmount0;
 		uint gotStock = 0;
+		(uint priceMul, uint priceDiv) = loadPriceMulDiv();
 		for(uint i=0; i<orderPosList.length; i++) {
 			for(uint j=0; j<256-48; j+=48) {
 				if(moneyAmount == 0 || gotStock == maxGotStock) {
@@ -266,7 +283,7 @@ abstract contract LimitOrdersLogicBase {
 					break;
 				}
 				(moneyAmount, gotStock) = dealWithSellOrder(maxPrice, uint(orderPos), maxGotStock,
-										    moneyAmount, gotStock);
+								priceMul, priceDiv, moneyAmount, gotStock);
 			}
 		}
 		uint dealMoney = moneyAmount0 - moneyAmount;
@@ -278,32 +295,36 @@ abstract contract LimitOrdersLogicBase {
 		emit DealWithSellOrders(msg.sender, stock_money_time);
 	}
 
-	function dealWithSellOrder(uint maxPrice, uint orderPos, uint maxGotStock,
+	function dealWithSellOrder(uint maxPrice, uint orderPos, uint maxGotStock, uint priceMul, uint priceDiv,
 				   uint remainedMoney, uint gotStock) internal returns (uint, uint) {
-		(uint priceTick, uint idx) = (uint(orderPos)&0xFFFF, uint(orderPos)>>16);
-		uint[] storage sellOrderIdList = sellOrderIdLists[priceTick];
-		if(idx >= sellOrderIdList.length) {
-			return (remainedMoney, gotStock);
+		uint[] storage sellOrderIdList;
+		uint orderId;
+		{//Prevent "Stack too deep, try removing local variables."
+			(uint priceTick, uint idx) = (uint(orderPos)&0xFFFF, uint(orderPos)>>16);
+			sellOrderIdList = sellOrderIdLists[priceTick];
+			if(idx >= sellOrderIdList.length) {
+				return (remainedMoney, gotStock);
+			}
+			orderId = sellOrderIdList[idx];
 		}
-		uint orderId = sellOrderIdList[idx];
 		GridOrder memory gridOrder = getGridOrder(orderId);
 		uint price = uint(gridOrder.priceBaseHi)<<(uint(gridOrder.priceTickHi)/100);
-		if(price > maxPrice) {
+		if(price*priceMul > maxPrice*priceDiv) {
 			return (remainedMoney, gotStock);
 		}
-		uint moneyAmountOfMaker = price*uint(gridOrder.stockAmount)/(10**PriceDecimals);
+		uint moneyAmountOfMaker = price*priceMul*uint(gridOrder.stockAmount)/((10**PriceDecimals)*priceDiv);
 		(uint dealMoneyAmount, uint dealStockAmount) = (0, 0);
 		if(moneyAmountOfMaker <= remainedMoney) {
 			dealMoneyAmount = moneyAmountOfMaker;
 			dealStockAmount = gridOrder.stockAmount;
 		} else {
 			dealMoneyAmount = remainedMoney;
-			dealStockAmount = remainedMoney*(10**PriceDecimals)/price;
+			dealStockAmount = remainedMoney*(10**PriceDecimals)*priceDiv/(price*priceMul);
 		}
 		uint newGotStock = gotStock + dealStockAmount;
 		if(newGotStock > maxGotStock) {
 			dealStockAmount = maxGotStock-gotStock;
-			dealMoneyAmount = dealStockAmount*price/(10**PriceDecimals);
+			dealMoneyAmount = dealStockAmount*price*priceMul/((10**PriceDecimals)*priceDiv);
 			newGotStock = maxGotStock;
 		}
 		gotStock = newGotStock;
@@ -321,6 +342,7 @@ abstract contract LimitOrdersLogicBase {
 		uint stockAmount = safeReceive(stock, msg.sender, stockAmountIn, true);
 		uint stockAmount0 = stockAmount;
 		uint gotMoney = 0;
+		(uint priceMul, uint priceDiv) = loadPriceMulDiv();
 		for(uint i=0; i<orderPosList.length; i++) {
 			for(uint j=0; j<256-48; j+=48) {
 				if(stockAmount == 0) {
@@ -331,7 +353,7 @@ abstract contract LimitOrdersLogicBase {
 					break;
 				}
 				(stockAmount, gotMoney) = dealWithBuyOrder(minPrice, uint(orderPos), maxGotMoney,
-									   	stockAmount, gotMoney);
+								priceMul, priceDiv, stockAmount, gotMoney);
 			}
 		}
 		uint fee = gotMoney * 2 / 1000; //0.2% fee
@@ -343,32 +365,36 @@ abstract contract LimitOrdersLogicBase {
 		emit DealWithBuyOrders(msg.sender, stock_money_time);
 	}
 
-	function dealWithBuyOrder(uint minPrice, uint orderPos, uint maxGotMoney, 
+	function dealWithBuyOrder(uint minPrice, uint orderPos, uint maxGotMoney, uint priceMul, uint priceDiv,
 				  uint remainedStock, uint gotMoney) internal returns (uint, uint) {
-		(uint priceTick, uint idx) = (uint(orderPos)&0xFFFF, uint(orderPos)>>16);
-		uint[] storage buyOrderIdList = buyOrderIdLists[priceTick];
-		if(idx >= buyOrderIdList.length) {
-			return (remainedStock, gotMoney);
+		uint[] storage buyOrderIdList;
+		uint orderId;
+		{//Prevent "Stack too deep, try removing local variables."
+			(uint priceTick, uint idx) = (uint(orderPos)&0xFFFF, uint(orderPos)>>16);
+			buyOrderIdList = buyOrderIdLists[priceTick];
+			if(idx >= buyOrderIdList.length) {
+				return (remainedStock, gotMoney);
+			}
+			orderId = buyOrderIdList[idx];
 		}
-		uint orderId = buyOrderIdList[idx];
 		GridOrder memory gridOrder = getGridOrder(orderId);
 		uint price = uint(gridOrder.priceBaseLo)<<(uint(gridOrder.priceTickLo)/100);
-		if(price < minPrice) {
+		if(price*priceMul < minPrice*priceDiv) {
 			return (remainedStock, gotMoney);
 		}
-		uint stockAmountOfMaker = uint(gridOrder.moneyAmount)*(10**PriceDecimals)/price;
+		uint stockAmountOfMaker = uint(gridOrder.moneyAmount)*(10**PriceDecimals)*priceDiv/(price*priceMul);
 		(uint dealMoneyAmount, uint dealStockAmount) = (0, 0);
 		if(stockAmountOfMaker <= remainedStock) {
 			dealMoneyAmount = gridOrder.moneyAmount;
 			dealStockAmount = stockAmountOfMaker;
 		} else {
-			dealMoneyAmount = remainedStock*price/(10**PriceDecimals);
+			dealMoneyAmount = remainedStock*price*priceMul/((10**PriceDecimals)*priceDiv);
 			dealStockAmount = remainedStock;
 		}
 		uint newGotMoney = gotMoney + dealMoneyAmount;
 		if(newGotMoney > maxGotMoney) {
 			dealMoneyAmount = maxGotMoney - gotMoney;
-			dealStockAmount = dealMoneyAmount*(10**PriceDecimals)/price;
+			dealStockAmount = dealMoneyAmount*(10**PriceDecimals)*priceDiv/(price*priceMul);
 			newGotMoney = maxGotMoney;
 		}
 		gotMoney = newGotMoney;
@@ -380,6 +406,7 @@ abstract contract LimitOrdersLogicBase {
 	}
 
 	function withdrawReward() external {
+		address factory = address(bytes20(uint160(priceAdjust_factory)));
 		address receiver = IFeeTo(factory).feeTo();
 		safeTransfer(money, receiver, pendingReward);
 		pendingReward = 0;
@@ -463,13 +490,13 @@ contract LimitOrdersLogicForSmartBCH is LimitOrdersLogicBase {
 contract LimitOrdersProxy {
 	address public stock;
 	address public money;
-	address public factory;
+	uint public priceAdjust_factory;
 	uint immutable public implAddr;
 	
 	constructor(address _stock, address _money, address _impl) {
 		stock = _stock;
 		money = _money;
-		factory = msg.sender;
+		priceAdjust_factory = uint(uint160(bytes20(msg.sender)));
 		implAddr = uint(uint160(bytes20(address(_impl))));
 	}
 	
@@ -522,6 +549,16 @@ contract LimitOrdersFactory {
 
 	function create(address stock, address money, address impl) external {
 		address pairAddr = address(new LimitOrdersProxy{salt: 0}(stock, money, impl));
+		uint stockDecimals = IERC20(stock).decimals();
+		uint moneyDecimals = IERC20(stock).decimals();
+		uint priceAdjust;
+		if(moneyDecimals >= stockDecimals) {
+			priceAdjust = (10**(moneyDecimals - stockDecimals))<<1;
+		} else {
+			priceAdjust = (10**(stockDecimals - moneyDecimals))<<1;
+			priceAdjust |= 1;
+		}
+		LimitOrdersLogicBase(pairAddr).initPriceAdjust(priceAdjust<<160);
 		emit Created(stock, money, pairAddr);
 	}
 }
