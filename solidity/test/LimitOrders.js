@@ -41,8 +41,8 @@ contract('LimitOrdersFactory', async (accounts) => {
 
     before(async () => {
         logic = await LimitOrdersLogic.new();
-        wbtc = await FakeToken.new("WBTC", 21000000n * _1e18);
-        usdt = await FakeToken.new("USDT", 10000000n * _1e18);
+        wbtc = await FakeToken.new("WBTC", 21000000n * _1e18, 18);
+        usdt = await FakeToken.new("USDT", 10000000n * _1e18, 18);
     });
 
     it('create', async () => {
@@ -110,8 +110,8 @@ contract('LimitOrdersLogic', async (accounts) => {
 
     beforeEach(async () => {
         const totalSupply = 10000000n * _1e18;
-        wbtc = await FakeToken.new("WBTC", totalSupply);
-        usdt = await FakeToken.new("USDT", totalSupply);
+        wbtc = await FakeToken.new("WBTC", totalSupply, 18);
+        usdt = await FakeToken.new("USDT", totalSupply, 18);
         const result = await factory.create(wbtc.address, usdt.address, logic.address);
         const event = getPairCreatedEvent(result);
         const pairAddr = event.pairAddr;
@@ -728,7 +728,7 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
 
     beforeEach(async () => {
         const totalSupply = 10000000n * _1e18;
-        usdt = await FakeToken.new("USDT", totalSupply);
+        usdt = await FakeToken.new("USDT", totalSupply, 18);
         const result = await factory.create(sbch.address, usdt.address, logic.address);
         const event = getPairCreatedEvent(result);
         const pairAddr = event.pairAddr;
