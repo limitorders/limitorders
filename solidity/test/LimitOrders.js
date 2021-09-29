@@ -53,7 +53,7 @@ contract('LimitOrdersFactory', async (accounts) => {
         const pair = await LimitOrdersLogic.at(pairAddr);
         assert.equal(await pair.stock(), wbtc.address);
         assert.equal(await pair.money(), usdt.address);
-        assert.equal(await pair.factory(), factory.address);
+        assert.equal(await getFactoryAddr(pair), factory.address);
     });
 
     it('setFeeTo', async () => {
@@ -897,6 +897,12 @@ contract('LimitOrdersLogic_SEP206', async (accounts) => {
 
 });
 
+
+async function getFactoryAddr(pair) {
+    const n = await pair.priceAdjust_factory();
+    const addr = BigInt(n) & ((1n << 160n) - 1n);
+    return web3.utils.toChecksumAddress('0x' + addr.toString(16));
+}
 
 async function createGridOrder(pair, addr, args) {
     const result = await pair.createGridOrder(pack(args), { from: addr });

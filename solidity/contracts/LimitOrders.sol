@@ -520,6 +520,8 @@ contract LimitOrdersProxy {
 }
 
 contract LimitOrdersFactory {
+	address constant SEP206Contract = address(bytes20(uint160(0x2711)));
+
 	address public feeToSetter;
 	address public newFeeToSetter;
 	address public feeTo;
@@ -549,8 +551,8 @@ contract LimitOrdersFactory {
 
 	function create(address stock, address money, address impl) external {
 		address pairAddr = address(new LimitOrdersProxy{salt: 0}(stock, money, impl));
-		uint stockDecimals = IERC20(stock).decimals();
-		uint moneyDecimals = IERC20(stock).decimals();
+		uint stockDecimals = stock == SEP206Contract ? 18 : IERC20(stock).decimals();
+		uint moneyDecimals = money == SEP206Contract ? 18 : IERC20(money).decimals();
 		uint priceAdjust;
 		if(moneyDecimals >= stockDecimals) {
 			priceAdjust = (10**(moneyDecimals - stockDecimals))<<1;
