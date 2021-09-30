@@ -30,6 +30,16 @@ function hexToFloat(hexStr, decimals) {
   return ethers.utils.formatUnits(bn, decimals)*1.0
 }
 
+function dateToStr(d) {
+  var dd = String(d.getDate()).padStart(2, '0');
+  var MM = String(d.getMonth() + 1).padStart(2, '0'); //January is 0!
+  var hh = String(d.getHours()).padStart(2, '0')
+  var mm = String(d.getMinutes()).padStart(2, '0')
+  var yyyy = d.getFullYear();
+  
+  return yyyy + '/' + MM + '/' + dd + " "+hh+":"+mm
+}
+
 export default {
   data() {
     return {
@@ -75,8 +85,8 @@ export default {
 	    }
 	    var timestamp = parseInt(logs[i].data.substr(2+48), 16)
 	    var t = new Date()
-	    order.time = t.toLocaleString()
-	    t.setTime(timestamp)
+	    t.setTime(timestamp*1000)
+	    order.time = dateToStr(t)
 	    if(logs[i].topics[0] == DealWithSellOrders) {
 	      order.direction = "buy"
 	    }
