@@ -13,6 +13,11 @@
     <!--
     <button @click="unsetCurr" style="font-size:20px; width: 280px;">unset current market</button><br/>
     -->
+    <p>On the Amber testnet, there are three demo markets:
+    <a href="javascript:" @click.prevent.stop="enterMARSBCH">MARS/BCH</a>, 
+    <a href="javascript:" @click.prevent.stop="enterXYZBCH">XYZ/BCH</a> and 
+    <a href="javascript:" @click.prevent.stop="enterMARSXYZ">MARS/XYZ</a>. You can click these links to enter them.</p>
+    <hr/>
     <p v-if="hasHistory">Here are some markets you have entered before:</p>
     <table class="table">
     <template v-for="(entry, idx) in markets" :keys="entry.fullInfo">
@@ -68,7 +73,24 @@ export default {
       markets: []
     }
   },
+// MARS: 0x434113E92Ee117F5Ddc4D0a23047A7b1ce8D38af
+// XYZ: 0xfAa9fCC4e601d5B7E365A8a17173D48bb4C98371
   methods: {
+    async enterMARSBCH() {
+       this.stockToken = "0x434113E92Ee117F5Ddc4D0a23047A7b1ce8D38af"
+       this.moneyToken = "0x0000000000000000000000000000000000002711"
+       await this.enterMarket()
+    },
+    async enterXYZBCH() {
+       this.stockToken = "0xfAa9fCC4e601d5B7E365A8a17173D48bb4C98371"
+       this.moneyToken = "0x0000000000000000000000000000000000002711"
+       await this.enterMarket()
+    },
+    async enterMARSXYZ() {
+       this.stockToken = "0x434113E92Ee117F5Ddc4D0a23047A7b1ce8D38af"
+       this.moneyToken = "0xfAa9fCC4e601d5B7E365A8a17173D48bb4C98371"
+       await this.enterMarket()
+    },
     async enterMarket() {
       if (typeof window.ethereum === 'undefined') {
         alertNoWallet()
@@ -80,7 +102,7 @@ export default {
         const stockContract = new ethers.Contract(this.stockAddr, SEP20ABI, provider)
         this.stockSymbol = await stockContract.symbol()
       } catch(e) {
-        alert("Error when reading the stock token's symbols. Maybe "+stockAddr+" is not a SEP20 token's address?")
+        alert("Error when reading the stock token's symbols. Maybe "+this.stockAddr+" is not a SEP20 token's address?")
 	console.log(e)
       }
       try {
@@ -88,7 +110,7 @@ export default {
         const moneyContract = new ethers.Contract(this.moneyAddr, SEP20ABI, provider)
         this.moneySymbol = await moneyContract.symbol()
       } catch(e) {
-        alert("Error when reading the money token's symbols. Maybe "+moneyAddr+" is not a SEP20 token's address?")
+        alert("Error when reading the money token's symbols. Maybe "+this.moneyAddr+" is not a SEP20 token's address?")
 	console.log(e)
       }
       const marketAddress = getMarketAddress(this.stockAddr, this.moneyAddr)
