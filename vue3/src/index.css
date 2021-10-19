@@ -21,7 +21,7 @@
     width: 480px;
     outline: 0;
     border-width: 0 0 1px;
-    border-color: #2c3e50;
+    border-color: #3f8ed1;
 }
 
 .narrowinput {
@@ -29,13 +29,14 @@
     width: 300px;
     outline: 0;
     border-width: 0 0 1px;
-    border-color: #2c3e50;
+    border-color: #3f8ed1;
 }
 
 .usertextarea {
     font-size:20px;
     width: 520px;
     border-radius: 5px;
+    border-color: #3f8ed1;
 }
 
 .normal {
