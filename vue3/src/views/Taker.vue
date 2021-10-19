@@ -3,40 +3,45 @@
     <h3>Current Market: <code><a v-bind:href="stockURL">{{stockSymbol}}</a>/<a v-bind:href="moneyURL">{{moneySymbol}}</a></code></h3>
     <p style="text-align: center">My Address: {{myAddress}}<br>
     My Balances: {{stockAmount}} {{stockSymbol}}; {{moneyAmount}} {{moneySymbol}}</p>
+    <p style="font-size: 8px">&nbsp;</p>
     <p style="text-align: center;">
       <input type="radio" id="buy" value="Buy" v-model="picked" style="width: 50px">
       <label for="buy" @click="toBuy" v-bind:style="picked=='Buy'? 'font-weight: bold; text-decoration: underline;': ''">
       I Want to Buy {{stockSymbol}}</label>
-      <code style="color: lightgrey;">&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;</code>
+      <span style="color: lightgrey;">&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;</span>
       <input type="radio" id="sell" value="Sell" v-model="picked" style="width: 50px">
       <label for="sell" @click="toSell" v-bind:style="picked=='Sell'? 'font-weight: bold; text-decoration: underline;': ''">
       I Want to Sell {{stockSymbol}}</label>
     </p>
+    <p style="font-size: 8px">&nbsp;</p>
     <div v-if="picked=='Buy'">
       <table style="margin: auto">
-      <tr><td><code>&nbsp;Buy Price ({{moneySymbol}}): </code></td>
-      <td><input v-model="buyPrice" type="number"></td></tr>
-      <tr><td><code>&nbsp;Buy Amount ({{stockSymbol}}): </code></td>
-      <td><input v-model="buyAmount" type="number"></td></tr>
+      <tr><td><span style="font-family: monospace;">&nbsp;Buy Price ({{moneySymbol}}): </span></td>
+      <td><input class="narrowinput" v-model="buyPrice" type="number"></td></tr>
+      <tr><td><span style="font-family: monospace;">&nbsp;Buy Amount ({{stockSymbol}}): </span></td>
+      <td><input class="narrowinput" v-model="buyAmount" type="number"></td></tr>
       </table>
-      <p style="text-align: center;"><button @click="buy" style="font-size: 24px">
-      <code> &nbsp;Buy!</code></button>
+      <p style="font-size: 8px">&nbsp;</p>
+      <p style="text-align: center;"><button class="button is-primary" @click="buy" style="font-size: 24px">
+      <span style="font-family: monospace;"> &nbsp;Buy!</span></button>
       </p>
     </div>
     <div v-else>
       <table style="margin: auto">
-      <tr><td><code>Sell Price ({{moneySymbol}}): </code></td>
-      <td><input v-model="sellPrice" type="number"></td></tr>
-      <tr><td><code>Sell Amount ({{stockSymbol}}): </code></td>
-      <td><input v-model="sellAmount" type="number"></td></tr>
+      <tr><td><span style="font-family: monospace;">Sell Price ({{moneySymbol}}): </span></td>
+      <td><input class="narrowinput" v-model="sellPrice" type="number"></td></tr>
+      <tr><td><span style="font-family: monospace;">Sell Amount ({{stockSymbol}}): </span></td>
+      <td><input class="narrowinput" v-model="sellAmount" type="number"></td></tr>
       </table>
-      <p style="text-align: center;"><button @click="sell" style="font-size: 24px">
-      <code> Sell!</code></button>
+      <p style="font-size: 8px">&nbsp;</p>
+      <p style="text-align: center;"><button class="button is-primary" @click="sell" style="font-size: 24px">
+      <span style="font-family: monospace;"> Sell!</span></button>
       </p>
     </div>
     <hr/>
-    <p style="text-align: center;"><button @click="showDepth" style="font-size: 22px">
+    <p style="text-align: center;"><button class="button is-info is-light" @click="showDepth" style="font-size: 22px">
     Show Depth Graphs</button></p>
+    <p style="font-size: 8px">&nbsp;</p>
     <div id="sell_depth"></div>
     <div id="buy_depth"></div>
   </div>
@@ -117,12 +122,10 @@ function drawDepthGraph(rows, id, yTitle) {
         hAxis: {
           title: 'Price'
         },
-        vAxis: {
-          title: yTitle
-        },
         series: {
           1: {curveType: 'none'}
-        }
+        },
+	legend: { position: 'top' }
       };
 
       var chart = new google.visualization.LineChart(document.getElementById(id));

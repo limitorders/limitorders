@@ -1,10 +1,10 @@
 <template>
   <div class="normal">
-    <p style="text-align: center"><button @click="listHistory" style="font-size: 20px">
+    <p style="text-align: center"><button class="button is-primary" @click="listHistory" style="font-size: 20px">
     List My Historical Orders</button></p>
     <hr/>
     <div v-show="showOrderList">
-      <table style='border: "1px solid"; margin: auto'><tr>
+      <table style='border: "1px solid"; margin: auto; font-size: 12px;'><tr>
       <th align="right">&nbsp;&nbsp;Order Type</th>
       <th align="right">&nbsp;&nbsp;Stock</th>
       <th align="right">&nbsp;&nbsp;Money</th>

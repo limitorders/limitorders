@@ -50,6 +50,29 @@ window.alertNoWallet = function() {
       alert("No wallet installed! Please install MetaMask or other web3 wallet to use this App.");
 }
 
+window.connectWallet = async function() {
+   if (typeof window.ethereum === 'undefined') {
+      if (typeof window.web3 !== 'undefined') {
+          window.ethereum = window.web3
+      } else if (typeof window.TPJSBrigeClient !== 'undefined') {
+          window.ethereum = window.TPJSBrigeClient
+      } else if (typeof window.imToken !== 'undefined') {
+          window.ethereum = window.imToken
+      } else {
+          const provider = await detectEthereumProvider()
+          if (provider) {
+              window.ethereum = provider
+          } else {
+              alertNoWallet()
+	      return false
+          }
+      }
+   } else {
+      await ethereum.request({ method: 'eth_requestAccounts' })
+   }
+   return true
+}
+
 window.alertNoCurrentMarket = function() {
       alert("You have not chosen the current market! Please choose one in the 'Markets' tab.");
 }
@@ -104,14 +127,24 @@ window.safeGetAmount = async function(coinType, symbol, amount, decimals, market
   return ethers.utils.parseUnits(amount.toString(), decimals)
 }
 
+google.charts.load('current', {packages: ['corechart', 'line']});
 
-if (typeof window.ethereum === 'undefined') {
-  alertNoWallet()
-} else {
-  ethereum.request({ method: 'eth_requestAccounts' })
+function IsPC() {
+       var userAgentInfo = navigator.userAgent;
+       var Agents = new Array("Android", "iPhone", "SymbianOS", "Windows Phone", "iPad", "iPod");
+       var flag = true;
+       for (var v = 0; v < Agents.length; v++) {
+            if (userAgentInfo.indexOf(Agents[v]) > 0) {
+                flag = false;
+                break;
+             }
+       }
+       return flag;
 }
 
-google.charts.load('current', {packages: ['corechart', 'line']});
+if(IsPC()) {
+   document.getElementById("app").style.zoom = 1.1
+}
 
 createApp(App).use(router).mount('#app')
 

@@ -1,13 +1,14 @@
 <template>
-  <h1><img src="/favicon.svg">&nbsp;A Simple DEX with Limit Orders&nbsp;<img src="/favicon.svg"></h1>
   <div class="normal">
     <p>Here we implements a very simple DEX which supports <a href="https://www.investopedia.com/terms/g/grid-trading.asp">grid trading</a> based on limited orders. We hope it can be a useful complement to the AMM-based DEX markets on smartBCH.</p>
     <p>For grid trading, the orders must be placed in pairs: a sell-order at a higher price and a buy-order at a lower price. The money got in the dealt sell-order will be automatically placed in the corresponding buy-order, and vice-versa. If you do not want to sell (buy), just use a very high (low) price in the sell (buy) order, respectively.</p>
     <p>This is a <a href="https://www.puredapp.org">Pure DApp</a>, which means its contract code and front-end code are both opensource and anyone can deploy them at anywhere.</p>
     <p><b>CAVEAT:</b> This is an opensource software. It is provided “as is”, without warranty of any kind. Please use it <b>AT YOUR OWN RISK</b>.</p>
+    <!--
     <p><button @click="deployLogic">deployLogic</button></p>
     <p><button @click="deployFactory">deployFactory</button></p>
     <p><button @click="deploySimpleToken">deploySimpleToken</button></p>
+    -->
   </div>
 </template>
 

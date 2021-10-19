@@ -1,21 +1,23 @@
 <template>
   <div v-if="hasCurrentMarket" class="normal">
-    <h3>Current Market: <code><a v-bind:href="stockURL">{{stockSymbol}}</a>/<a v-bind:href="moneyURL">{{moneySymbol}}</a></code></h3>
+    <h3 v-if="hasCurrentMarket">Current Market: <code style="font-size: 24px"><a v-bind:href="stockURL">{{stockSymbol}}</a>/<a v-bind:href="moneyURL">{{moneySymbol}}</a></code></h3>
+    <h3 v-else>Current Market: [Not Set]</h3>
     <p style="text-align: center">My Address: {{myAddress}}<br>
     My Balances: {{stockAmount}} {{stockSymbol}}; {{moneyAmount}} {{moneySymbol}}</p>
     <div>
       <table style="margin: auto">
-      <tr><td><code>High Price: </code></td>
-      <td><input v-model="highPrice" type="number"></td></tr>
-      <tr><td><code>&nbsp;Low Price: </code></td>
-      <td><input v-model="lowPrice" type="number"></td></tr>
-      <tr><td><code>Money Amount ({{moneySymbol}}): </code></td>
-      <td><input v-model="moneyPlaced" type="number"></td></tr>
-      <tr><td><code>Stock Amount ({{stockSymbol}}): </code></td>
-      <td><input v-model="stockPlaced" type="number"></td></tr>
+      <tr><td><span style="font-family: monospace;">High Price: </span></td>
+      <td><input v-model="highPrice" class="narrowinput" type="number"></td></tr>
+      <tr><td><span style="font-family: monospace;">&nbsp;Low Price: </span></td>
+      <td><input v-model="lowPrice" class="narrowinput" type="number"></td></tr>
+      <tr><td><span style="font-family: monospace;">Money Amount ({{moneySymbol}}): </span></td>
+      <td><input v-model="moneyPlaced" class="narrowinput" type="number"></td></tr>
+      <tr><td><span style="font-family: monospace;">Stock Amount ({{stockSymbol}}): </span></td>
+      <td><input v-model="stockPlaced" class="narrowinput" type="number"></td></tr>
       </table>
-      <p style="text-align: center"><button @click="placeGridOrders" style="font-size: 20px">
-      <code>Place Grid Orders</code></button></p>
+      <p style="font-size: 8px">&nbsp;</p>
+      <p style="text-align: center">
+      <button @click="placeGridOrders" class="button is-primary" style="font-size: 20px">Place Grid Orders</button></p>
     </div>
     <hr/>
     <div v-show="showOrderList">

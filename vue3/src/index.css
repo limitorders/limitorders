@@ -4,14 +4,45 @@
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
   color: #2c3e50;
-  margin-top: 60px;
+  margin-top: 20px;
+}
+
+
+.router-link-active,
+.router-link-exact-active {
+  font-size: 30px;
+  font-weight: bold;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.userinput {
+    font-size:20px;
+    width: 480px;
+    outline: 0;
+    border-width: 0 0 1px;
+    border-color: #2c3e50;
+}
+
+.narrowinput {
+    font-size:20px;
+    width: 300px;
+    outline: 0;
+    border-width: 0 0 1px;
+    border-color: #2c3e50;
+}
+
+.usertextarea {
+    font-size:20px;
+    width: 520px;
+    border-radius: 5px;
 }
 
 .normal {
-   width: 1000px;
+   width: 600px;
    margin: auto;
    text-align: left;
-   font-size: 24px;
+   font-size: 22px;
 }
 
 p {

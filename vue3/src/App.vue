@@ -1,12 +1,27 @@
 <template>
   <div id="nav" style="font-size: 30px">
-    <router-link to="/">Home</router-link> |
-    <router-link to="/markets">Markets</router-link> |
-    <router-link to="/maker">Grid Trading</router-link> |
-    <router-link to="/taker">Exchange</router-link> |
-    <router-link to="/history">History</router-link>
+  <p style="text-align: center"><img style="height: 60px" src="favicon.svg"><img width=260 src="gridex.jpg"></p>
+    <router-link tag="li" to="/">Home</router-link><span style="color: #EEEEEE"> | </span>
+    <router-link tag="li" to="/markets">Markets</router-link><span style="color: #EEEEEE"> | </span>
+    <router-link tag="li" to="/grid">Grid</router-link><span style="color: #EEEEEE"> | </span>
+    <router-link tag="li" to="/exchange">Exchange</router-link><span style="color: #EEEEEE"> | </span>
+    <router-link tag="li" to="/history">History</router-link>
   </div>
+  <br>
   <router-view/>
 </template>
+
 <style>
 </style>  
+
+<script>
+export default {
+  data() {
+    return {
+    }
+  },
+  async mounted() {
+      this.$router.push('/');
+  }
+}
+</script>

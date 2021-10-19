@@ -1,11 +1,14 @@
 <template>
   <div class="normal">
-    <h3 v-if="hasCurrentMarket">Current Market: <code><a v-bind:href="stockURL">{{stockSymbol}}</a>/<a v-bind:href="moneyURL">{{moneySymbol}}</a></code></h3>
+    <h3 v-if="hasCurrentMarket">Current Market: <code style="font-size: 24px"><a v-bind:href="stockURL">{{stockSymbol}}</a>/<a v-bind:href="moneyURL">{{moneySymbol}}</a></code></h3>
     <h3 v-else>Current Market: [Not Set]</h3>
-    If you want to enter a market, please specify its stock and money (0x0000000000000000000000000000000000002711 for BCH):<br/>
-    <code>Stock:&nbsp;</code><input v-model="stockToken" type="text" placeholder="Please enter an address in HEX format"><br/>
-    <code>Money:&nbsp;</code><input v-model="moneyToken" type="text" placeholder="Please enter an address in HEX format">
-    &nbsp;<button @click="enterMarket" style="font-size: 20px;">Enter</button><br/>
+    If you want to enter a market, please specify its stock and money:<br/>
+    <span style="font-family: monospace;">Stock:&nbsp;</span><input class="userinput" v-model="stockToken" type="text" placeholder="Please enter an address in HEX format"><br/>
+    <span style="font-family: monospace;">Money:&nbsp;</span><input class="userinput" v-model="moneyToken" type="text" placeholder="Please enter an address in HEX format">
+    <br>
+    <p style="font-size: 8px">&nbsp;</p>
+    <p style="text-align: center">
+    <button class="button is-primary" @click="enterMarket" style="font-size: 20px;">Enter</button></p>
     <hr/>
     <!--
     <button @click="unsetCurr" style="font-size:20px; width: 280px;">unset current market</button><br/>
@@ -14,11 +17,13 @@
     <table>
     <template v-for="(entry, idx) in markets" :keys="entry.fullInfo">
       <tr><td>
-      <code><a v-bind:href="entry.stockURL">{{entry.stockSymbol}}</a>/<a v-bind:href="entry.moneyURL">{{entry.moneySymbol}}</a></code>&nbsp;</td><td>
-      <button @click="enterOldMarket" v-bind:name="entry.fullInfo"
-      style="font-size:20px; width: 80px;">enter</button>&nbsp;
-      <button @click="remove" v-bind:name="entry.fullInfo"
-      style="font-size:20px; width: 80px;">remove</button>
+      <code style="font-size: 24px"><a v-bind:href="entry.stockURL">{{entry.stockSymbol}}</a>/
+      <a v-bind:href="entry.moneyURL">{{entry.moneySymbol}}</a></code>&nbsp;
+      </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      <button class="button is-small" @click="remove" v-bind:name="entry.fullInfo"
+      style="font-size:20px; width: 80px;height: 36px;">remove</button>&nbsp;
+      <button class="button is-small is-primary" @click="enterOldMarket" v-bind:name="entry.fullInfo"
+      style="font-size:20px; width: 80px;height: 36px;">enter</button>
       </td></tr>
     </template>
     </table>

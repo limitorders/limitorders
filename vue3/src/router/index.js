@@ -7,9 +7,9 @@ import History from '../views/History.vue'
 const routes = [
   { path: "/", component: Home },
   { path: "/markets", component: Markets },
-  { path: "/taker", component: Taker },
+  { path: "/exchange", component: Taker },
   { path: "/history", component: History },
-  { path: "/maker", component: Maker }]
+  { path: "/grid", component: Maker }]
 
 const router = createRouter({
   history: createWebHistory(process.env.BASE_URL),
