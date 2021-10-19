@@ -22,7 +22,7 @@
       <td><input class="narrowinput" v-model="buyAmount" type="number"></td></tr>
       </table>
       <p style="font-size: 8px">&nbsp;</p>
-      <p style="text-align: center;"><button class="button is-primary" @click="buy" style="font-size: 24px">
+      <p style="text-align: center;"><button class="button is-info" @click="buy" style="font-size: 24px">
       <span style="font-family: monospace;"> &nbsp;Buy!</span></button>
       </p>
     </div>
@@ -34,7 +34,7 @@
       <td><input class="narrowinput" v-model="sellAmount" type="number"></td></tr>
       </table>
       <p style="font-size: 8px">&nbsp;</p>
-      <p style="text-align: center;"><button class="button is-primary" @click="sell" style="font-size: 24px">
+      <p style="text-align: center;"><button class="button is-info" @click="sell" style="font-size: 24px">
       <span style="font-family: monospace;"> Sell!</span></button>
       </p>
     </div>
@@ -122,6 +122,10 @@ function drawDepthGraph(rows, id, yTitle) {
         hAxis: {
           title: 'Price'
         },
+        yAxis: {
+          title: yTitle
+        },
+	pointSize: 2,
         series: {
           1: {curveType: 'none'}
         },
@@ -251,15 +255,15 @@ export default {
          alert("Find no sell order to deal with!")
 	 return
        }
-       //var gasPrice = await provider.getStorageAt("0x0000000000000000000000000000000000002710","0x00000000000000000000000000000000000000000000000000000000000000002")
-       //if(gasPrice == "0x") {
-       //  gasPrice = "0x0"
-       //}
        var moneyNeeded = this.buyAmount*this.buyPrice
        const moneyAmountIn = await safeGetAmount(this.moneyAddr, this.moneySymbol, moneyNeeded,
        				this.moneyDecimals, this.marketAddress, 0)
        if(!moneyAmountIn) {
          return
+       }
+       var value = ethers.BigNumber.from(0)
+       if(this.moneyAddr == SEP206Address) {
+         value = moneyAmountIn
        }
        var maxPrice = ethers.utils.parseUnits(this.buyPrice.toString(), 26)
        var orderPosList = packOrderPosList(indexAndTickList)
@@ -272,7 +276,8 @@ export default {
        const provider = new ethers.providers.Web3Provider(window.ethereum)
        const signer = provider.getSigner()
        const marketContract = new ethers.Contract(this.marketAddress, ABI, provider).connect(signer)
-       var txResp = await marketContract.dealWithSellOrders(maxPrice, orderPosList, moneyAmountIn_maxGotStock)
+       var txResp = await marketContract.dealWithSellOrders(maxPrice, orderPosList,
+                                          moneyAmountIn_maxGotStock, {value: value})
        const receipt = await txResp.wait(1)
        console.log("receipt.logs", receipt.logs)
      },
@@ -285,14 +290,14 @@ export default {
          alert("Find no buy order to deal with!")
 	 return
        }
-       //var gasPrice = await provider.getStorageAt("0x0000000000000000000000000000000000002710","0x00000000000000000000000000000000000000000000000000000000000000002")
-       //if(gasPrice == "0x") {
-       //  gasPrice = "0x0"
-       //}
        const stockAmountIn = await safeGetAmount(this.stockAddr, this.stockSymbol, this.sellAmount,
        				this.stockDecimals, this.marketAddress, 0)
        if(!stockAmountIn) {
          return
+       }
+       var value = ethers.BigNumber.from(0)
+       if(this.stockAddr == SEP206Address) {
+         value = stockAmountIn
        }
        var minPrice = ethers.utils.parseUnits(this.sellPrice.toString(), 26)
        var orderPosList = packOrderPosList(indexAndTickList)
@@ -303,7 +308,8 @@ export default {
        const provider = new ethers.providers.Web3Provider(window.ethereum)
        const signer = provider.getSigner()
        const marketContract = new ethers.Contract(this.marketAddress, ABI, provider).connect(signer)
-       var txResp = await marketContract.dealWithBuyOrders(minPrice, orderPosList, stockAmountIn_maxGotMoney)
+       var txResp = await marketContract.dealWithBuyOrders(minPrice, orderPosList,
+                                         stockAmountIn_maxGotMoney, {value: value})
        const receipt = await txResp.wait(1)
        console.log("receipt.logs", receipt.logs)
      },

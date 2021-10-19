@@ -23,6 +23,7 @@ abstract contract LimitOrdersLogicBase {
 	address public stock;
 	address public money;
 	uint public priceAdjust_factory;
+	uint constant FeeRate = 2;
 
 	mapping(address => uint[]) private userOrderIdLists;
 	uint public pendingReward;
@@ -268,7 +269,7 @@ abstract contract LimitOrdersLogicBase {
 		uint totalMoneyAmount = moneyAmountIn_maxGotStock>>96;
 		uint maxGotStock = uint96(moneyAmountIn_maxGotStock);
 		totalMoneyAmount = safeReceive(money, msg.sender, totalMoneyAmount, true);
-		uint fee0 = totalMoneyAmount * 2 / 1000; // 0.2% fee
+		uint fee0 = totalMoneyAmount * FeeRate / 1000;
 		uint moneyAmount0 = totalMoneyAmount - fee0;
 		uint moneyAmount = moneyAmount0;
 		uint gotStock = 0;
@@ -357,7 +358,7 @@ abstract contract LimitOrdersLogicBase {
 								priceMul, priceDiv, stockAmount, gotMoney);
 			}
 		}
-		uint fee = gotMoney * 2 / 1000; //0.2% fee
+		uint fee = gotMoney * FeeRate / 1000;
 		pendingReward += fee;
 		safeTransfer(money, msg.sender, gotMoney - fee);
 		safeTransfer(stock, msg.sender, stockAmount);

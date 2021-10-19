@@ -10,14 +10,14 @@
       <td><input v-model="highPrice" class="narrowinput" type="number"></td></tr>
       <tr><td><span style="font-family: monospace;">&nbsp;Low Price: </span></td>
       <td><input v-model="lowPrice" class="narrowinput" type="number"></td></tr>
-      <tr><td><span style="font-family: monospace;">Money Amount ({{moneySymbol}}): </span></td>
-      <td><input v-model="moneyPlaced" class="narrowinput" type="number"></td></tr>
       <tr><td><span style="font-family: monospace;">Stock Amount ({{stockSymbol}}): </span></td>
       <td><input v-model="stockPlaced" class="narrowinput" type="number"></td></tr>
+      <tr><td><span style="font-family: monospace;">Money Amount ({{moneySymbol}}): </span></td>
+      <td><input v-model="moneyPlaced" class="narrowinput" type="number"></td></tr>
       </table>
       <p style="font-size: 8px">&nbsp;</p>
       <p style="text-align: center">
-      <button @click="placeGridOrders" class="button is-primary" style="font-size: 20px">Place Grid Orders</button></p>
+      <button @click="placeGridOrders" class="button is-info" style="font-size: 20px">Place Grid Orders</button></p>
     </div>
     <hr/>
     <div v-show="showOrderList">
@@ -89,12 +89,8 @@ export default {
     async cancel(event) {
       const provider = new ethers.providers.Web3Provider(window.ethereum)
       const signer = provider.getSigner()
-      //var gasPrice = await provider.getStorageAt("0x0000000000000000000000000000000000002710","0x00000000000000000000000000000000000000000000000000000000000000002")
-      //if(gasPrice == "0x") {
-      //  gasPrice = "0x0"
-      //}
       const marketContract = new ethers.Contract(this.marketAddress, ABI, provider).connect(signer)
-      await marketContract.cancelGridOrder(event.target.name/*, {gasPrice: gasPrice}*/)
+      await marketContract.cancelGridOrder(event.target.name)
     },
     async placeGridOrders() {
       if(!this.hasCurrentMarket) {
@@ -113,19 +109,22 @@ export default {
         alert("Both money and stock are zero in the grid order")
 	return
       }
-      //var gasPrice = await provider.getStorageAt("0x0000000000000000000000000000000000002710","0x00000000000000000000000000000000000000000000000000000000000000002")
-      //if(gasPrice == "0x") {
-      //  gasPrice = "0x0"
-      //}
+      var value = ethers.BigNumber.from(0)
       const moneyAmt = await safeGetAmount(this.moneyAddr, this.moneySymbol, this.moneyPlaced,
       				this.moneyDecimals, this.marketAddress, 0)
       if(!moneyAmt) {
         return
       }
+      if(this.moneyAddr == SEP206Address) {
+        value = moneyAmt
+      }
       const stockAmt = await safeGetAmount(this.stockAddr, this.stockSymbol, this.stockPlaced,
       				this.stockDecimals, this.marketAddress, 0)
       if(!stockAmt) {
         return
+      }
+      if(this.stockAddr == SEP206Address) {
+        value = stockAmt
       }
       console.log(moneyAmt)
       console.log(stockAmt)
@@ -143,7 +142,7 @@ export default {
       //const code = await provider.getCode(this.marketAddress)
       //console.log(code)
       const marketContract = new ethers.Contract(this.marketAddress, ABI, provider).connect(signer)
-      await marketContract.createGridOrder(packedOrder/*, {gasPrice: gasPrice}*/)
+      await marketContract.createGridOrder(packedOrder, {value: value})
     },
   },
   async mounted() {

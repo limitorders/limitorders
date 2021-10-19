@@ -8,13 +8,13 @@
     <br>
     <p style="font-size: 8px">&nbsp;</p>
     <p style="text-align: center">
-    <button class="button is-primary" @click="enterMarket" style="font-size: 20px;">Enter</button></p>
+    <button class="button is-info" @click="enterMarket" style="font-size: 20px;">Enter</button></p>
     <hr/>
     <!--
     <button @click="unsetCurr" style="font-size:20px; width: 280px;">unset current market</button><br/>
     -->
     <p v-if="hasHistory">Here are some markets you have entered before:</p>
-    <table>
+    <table class="table">
     <template v-for="(entry, idx) in markets" :keys="entry.fullInfo">
       <tr><td>
       <code style="font-size: 24px"><a v-bind:href="entry.stockURL">{{entry.stockSymbol}}</a>/
@@ -22,7 +22,7 @@
       </td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
       <button class="button is-small" @click="remove" v-bind:name="entry.fullInfo"
       style="font-size:20px; width: 80px;height: 36px;">remove</button>&nbsp;
-      <button class="button is-small is-primary" @click="enterOldMarket" v-bind:name="entry.fullInfo"
+      <button class="button is-small is-info" @click="enterOldMarket" v-bind:name="entry.fullInfo"
       style="font-size:20px; width: 80px;height: 36px;">enter</button>
       </td></tr>
     </template>

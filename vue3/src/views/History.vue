@@ -1,6 +1,6 @@
 <template>
   <div class="normal">
-    <p style="text-align: center"><button class="button is-primary" @click="listHistory" style="font-size: 20px">
+    <p style="text-align: center"><button class="button is-info" @click="listHistory" style="font-size: 20px">
     List My Historical Orders</button></p>
     <hr/>
     <div v-show="showOrderList">
