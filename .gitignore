@@ -2,3 +2,4 @@
 *.swp
 solidity/build
 node_modules/
+vue3/dist
