@@ -222,7 +222,20 @@ abstract contract LimitOrdersLogicBase {
 		return msgValue;
 	}
 
-	function cancelGridOrder(uint userIdx) external {
+	function cancelGridOrders(uint[] calldata uint32List) public {
+		uint mask = 0xFFFFFFFF;
+		for(uint i=0; i<uint32List.length; i++) {
+			for(uint j=0; j<256; j+=32) {
+				uint idx = (uint32List[i]>>j)&mask;
+				if(idx == mask) {
+					return;
+				}
+				cancelGridOrder(idx);
+			}
+		}
+	}
+
+	function cancelGridOrder(uint userIdx) public {
 		uint[] storage userOrderIdList = userOrderIdLists[msg.sender];
 		uint orderId = userOrderIdList[userIdx];
 		GridOrder memory order = getGridOrder(orderId);
