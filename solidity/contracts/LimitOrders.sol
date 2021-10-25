@@ -146,26 +146,40 @@ abstract contract LimitOrdersLogicBase {
 		require(success && ret, "trans-fail");
 	}
 
-	function safeReceive(address coinType, address sender, uint amount, bool bchExclusive) internal returns (uint96) {
+	function safeReceive(address coinType, uint msgValue, uint amount, bool bchExclusive) internal returns (uint96, uint) {
 		if(amount == 0) {
-			return 0;
+			return (0, msgValue);
 		}
 		uint realAmount = amount;
 		if(coinType == SEP206Contract) {
-			require(msg.value == amount, "value-mismatch");
+			require(msgValue >= amount, "value-mismatch");
+			msgValue -= amount;
 		} else {
 			require(!bchExclusive || msg.value == 0, "dont-send-bch");
 			uint oldBalance = IERC20(coinType).balanceOf(address(this));
-			IERC20(coinType).transferFrom(sender, address(this), uint(amount));
+			IERC20(coinType).transferFrom(msg.sender, address(this), uint(amount));
 			uint newBalance = IERC20(coinType).balanceOf(address(this));
 			realAmount = uint96(newBalance - oldBalance);
 		}
-		return uint96(realAmount);
+		return (uint96(realAmount), msgValue);
 	}
 	
 	// =============================================================
 	
+	function createGridOrders(uint[] calldata packedOrders) external payable {
+		uint msgValue = msg.value;
+		for(uint i=0; i<packedOrders.length; i++) {
+			msgValue = _createGridOrder(packedOrders[i], msgValue, i);
+		}
+		require(msgValue == 0, "value-mismatch");
+	}
+
 	function createGridOrder(uint packedOrder) external payable {
+		uint remainedValue = _createGridOrder(packedOrder, msg.value, 0);
+		require(remainedValue == 0, "value-mismatch");
+	}
+
+	function _createGridOrder(uint packedOrder, uint msgValue, uint i) private returns (uint) {
 		uint packedPriceLo = uint32(packedOrder >> 0);
 		uint packedPriceHi = uint32(packedOrder >> 32);
 		require(packedPriceHi > packedPriceLo, "Hi<=Lo");
@@ -178,10 +192,10 @@ abstract contract LimitOrdersLogicBase {
 		order.moneyAmount = uint96(packedOrder >> (64+96));
 		require(order.stockAmount != 0 || order.moneyAmount != 0, "zero-amount");
 		bool bchExclusive = stock != SEP206Contract && money != SEP206Contract;
-		order.stockAmount = safeReceive(stock, msg.sender, order.stockAmount, bchExclusive);
-		order.moneyAmount = safeReceive(money, msg.sender, order.moneyAmount, bchExclusive);
+		(order.stockAmount, msgValue) = safeReceive(stock, msgValue, order.stockAmount, bchExclusive);
+		(order.moneyAmount, msgValue) = safeReceive(money, msgValue, order.moneyAmount, bchExclusive);
 
-		uint orderId = (uint(uint160(bytes20(msg.sender)))<<96)|(uint(block.number)<<32);
+		uint orderId = (uint(uint160(bytes20(msg.sender)))<<96)|(uint(block.number)<<32)|i;
 		while(getGridOrder(orderId).priceBaseHi != 0) {
 			orderId++;
 		}
@@ -205,6 +219,7 @@ abstract contract LimitOrdersLogicBase {
 			buyOrderMaskWords[wordIdx] |= (uint(1)<<bitIdx); // set bit
 		}
 		emit CreateGridOrder(msg.sender, packedOrder);
+		return msgValue;
 	}
 
 	function cancelGridOrder(uint userIdx) external {
@@ -268,8 +283,9 @@ abstract contract LimitOrdersLogicBase {
 				    uint moneyAmountIn_maxGotStock) external payable {
 		uint totalMoneyAmount = moneyAmountIn_maxGotStock>>96;
 		uint maxGotStock = uint96(moneyAmountIn_maxGotStock);
-		totalMoneyAmount = safeReceive(money, msg.sender, totalMoneyAmount, true);
-		uint fee0 = totalMoneyAmount * FeeRate / 1000;
+		uint fee0; // declar here to avoid "Stack too deep, try removing local variables"
+		(totalMoneyAmount, fee0) = safeReceive(money, msg.value, totalMoneyAmount, true);
+		fee0 = totalMoneyAmount * FeeRate / 1000;
 		uint moneyAmount0 = totalMoneyAmount - fee0;
 		uint moneyAmount = moneyAmount0;
 		uint gotStock = 0;
@@ -341,7 +357,7 @@ abstract contract LimitOrdersLogicBase {
 				   uint stockAmountIn_maxGotMoney) external payable {
 		uint stockAmountIn = stockAmountIn_maxGotMoney>>96;
 		uint maxGotMoney = uint96(stockAmountIn_maxGotMoney);
-		uint stockAmount = safeReceive(stock, msg.sender, stockAmountIn, true);
+		(uint stockAmount, uint _notUsed) = safeReceive(stock, msg.value, stockAmountIn, true);
 		uint stockAmount0 = stockAmount;
 		uint gotMoney = 0;
 		(uint priceMul, uint priceDiv) = loadPriceMulDiv();
