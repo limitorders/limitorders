@@ -271,6 +271,41 @@ contract('LimitOrdersLogic', async (accounts) => {
         );
     });
 
+    it('createThenCancelGridOrders', async () => {
+        await wbtc.transfer(bob, 9e8, { from: alice });
+        await usdt.transfer(bob, 9e8, { from: alice });
+
+        const packedOrders = [];
+        for (let i = 1; i <= 20; i++) {
+            packedOrders.push(pack({priceLo: i*10000, priceHi: (i+1)*10000, stock: 1e5, money: 2e5}));
+        }
+        const result = await pair.createGridOrders(packedOrders, { from: bob });
+        const orderIds = await getUserOrderIDs(pair, bob, 0, 99);
+        // console.log(orderIds);
+        assert.lengthOf(orderIds, 20);
+
+        await pair.cancelGridOrders([
+            0x000000030000000500000007000000090000000B0000000D0000000F00000011n,
+            0x000000000000000000000000000000000000000000000000FFFFFFFF00000001n,
+            ], { from: bob });
+        const orderIds2 = await getUserOrderIDs(pair, bob, 0, 99);
+        // console.log(orderIds2);
+        assert.lengthOf(orderIds2, 11);
+        assert.deepEqual(orderIds2, [  
+            orderIds[0],
+            orderIds[16],
+            orderIds[2],
+            orderIds[12],
+            orderIds[4],
+            orderIds[19],
+            orderIds[6],
+            orderIds[14],
+            orderIds[8],
+            orderIds[18],
+            orderIds[10],
+      ]);
+    });
+
     it('getUserOrders', async () => {
         await wbtc.transfer(bob, 6e8, { from: alice });
         await usdt.transfer(bob, 6e8, { from: alice });
